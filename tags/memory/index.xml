@@ -11,10 +11,10 @@
     
     <item>
       <title>对Memory Reordering Caught in the Act的学习 续 - 关于go的部分</title>
-      <link>http://ikarishinjieva.github.io/post/2013-11-11-study-memory-reorder-cont</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9memory-reordering-caught-in-the-act%E7%9A%84%E5%AD%A6%E4%B9%A0-%E7%BB%AD---%E5%85%B3%E4%BA%8Ego%E7%9A%84%E9%83%A8%E5%88%86/</link>
       <pubDate>Mon, 11 Nov 2013 20:44:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-11-11-study-memory-reorder-cont</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9memory-reordering-caught-in-the-act%E7%9A%84%E5%AD%A6%E4%B9%A0-%E7%BB%AD---%E5%85%B3%E4%BA%8Ego%E7%9A%84%E9%83%A8%E5%88%86/</guid>
       <description>
 
 &lt;p&gt;这篇主要解决&lt;a href=&#34;http://ikarishinjieva.github.io/blog/blog/2013/11/07/study-memory-reorder/&#34;&gt;上一篇&lt;/a&gt;遗留下来的问题，问题的简要描述请参看&lt;a href=&#34;http://stackoverflow.com/questions/19901615/why-go-doesnt-show-memory-reordering&#34;&gt;我发在SO上的帖子&lt;/a&gt;&lt;/p&gt;
@@ -85,10 +85,10 @@ Software Developer’s Manual&lt;/a&gt;，可知&lt;code&gt;dec&lt;/code&gt;有�
     
     <item>
       <title>对Memory Reordering Caught in the Act的学习</title>
-      <link>http://ikarishinjieva.github.io/post/2013-11-07-study-memory-reorder</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9memory-reordering-caught-in-the-act%E7%9A%84%E5%AD%A6%E4%B9%A0/</link>
       <pubDate>Thu, 07 Nov 2013 21:40:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-11-07-study-memory-reorder</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9memory-reordering-caught-in-the-act%E7%9A%84%E5%AD%A6%E4%B9%A0/</guid>
       <description>&lt;p&gt;最近迷上了preshing.com，真的是非常专业的blog，每篇深浅合适而且可以相互印证，达到出书的质量了&lt;/p&gt;
 
 &lt;p&gt;学习了&lt;a href=&#34;http://preshing.com/20120515/memory-reordering-caught-in-the-act/&#34;&gt;Memory Reordering Caught in the Act&lt;/a&gt;，内容很简单，主要是说“即使汇编码是顺序的，CPU执行时会对Load-Save进行乱序执行，导致无锁的两线程出现意料之外的结果”&lt;/p&gt;
@@ -185,10 +185,10 @@ Software Developer’s Manual&lt;/a&gt;，可知&lt;code&gt;dec&lt;/code&gt;有�
     
     <item>
       <title>Java off-heap的一些参考</title>
-      <link>http://ikarishinjieva.github.io/post/2013-05-18-java-offheap-memory</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/java-off-heap%E7%9A%84%E4%B8%80%E4%BA%9B%E5%8F%82%E8%80%83/</link>
       <pubDate>Sat, 18 May 2013 23:00:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-05-18-java-offheap-memory</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/java-off-heap%E7%9A%84%E4%B8%80%E4%BA%9B%E5%8F%82%E8%80%83/</guid>
       <description>&lt;p&gt;读了Hazelcast的文档，很有意思的部分是&amp;rdquo;Elastic Memory&amp;rdquo;，为了减少GC，用到了java off-heap(off-heap允许Java直接操作内存空间, 类似于C的malloc和free)。之前孤陋寡闻，记录一些off-heap的参考。&lt;/p&gt;
 
 &lt;p&gt;.1.做了以下对比试验，来对比Heap和Non-heap&lt;/p&gt;

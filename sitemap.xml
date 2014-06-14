@@ -8,287 +8,287 @@
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-replication</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E6%B5%8B%E8%AF%95mysql%E4%B8%B4%E6%97%B6%E8%A1%A8%E7%9A%84%E5%A4%8D%E5%88%B6/</loc>
     <lastmod>2014-06-12T22:32:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-binlog</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E6%B5%8B%E8%AF%95mysql%E4%B8%B4%E6%97%B6%E8%A1%A8%E7%9A%84binlog/</loc>
     <lastmod>2014-06-12T22:30:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-05-15-mysql-table-cache</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9mysql-table-cache%E7%9A%84%E7%90%86%E8%A7%A3/</loc>
     <lastmod>2014-05-15T20:59:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-04-17-PREVIOUS_GTIDS_LOG_EVENT</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/previous_gtids_log_event%E7%9A%84%E6%A0%BC%E5%BC%8F/</loc>
     <lastmod>2014-04-17T22:08:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-04-05-MDL_map_partition-lock-split</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/mdl_map_partition%E4%B8%AD%E5%AF%B9%E9%94%81%E7%9A%84%E8%BF%87%E6%B8%A1/</loc>
     <lastmod>2014-04-05T11:43:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-04-04-MDL</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E6%95%B4%E7%90%86%E4%B8%80%E4%B8%8B%E6%9C%80%E8%BF%91%E8%AF%BB%E7%9A%84mdl%E6%BA%90%E7%A0%81/</loc>
     <lastmod>2014-04-04T20:00:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-04-01-study-mysql-bug-70307-2</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9mysql-bug-70307-%E7%9A%84%E5%86%8D%E5%AD%A6%E4%B9%A0/</loc>
     <lastmod>2014-04-01T13:07:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-03-26-mysql-fake-master-server</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/mysql-%E5%88%A9%E7%94%A8%E5%81%87master%E9%87%8D%E6%94%BEbinlog/</loc>
     <lastmod>2014-03-26T20:08:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-03-25-go-leak-fd</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/golang-cmd%E4%BC%9A%E6%B3%84%E9%9C%B2%E6%96%87%E4%BB%B6%E5%8F%A5%E6%9F%84/</loc>
     <lastmod>2014-03-25T22:34:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-03-20-go-file-lock</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/golang-windows%E5%92%8Clinux%E4%B8%8A%E7%9A%84%E6%96%87%E4%BB%B6%E9%94%81/</loc>
     <lastmod>2014-03-20T22:43:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-03-02-gen</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E6%8E%A8%E8%8D%90%E4%B8%8B%E6%88%91%E4%BF%AE%E6%94%B9%E7%9A%84gen/</loc>
     <lastmod>2014-03-02T21:29:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-02-22-go-exec-command-block-when-redirect-stdout</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/go-exec.command.wait-%E6%89%A7%E8%A1%8C%E5%90%8E%E5%8F%B0%E7%A8%8B%E5%BA%8F%E5%9C%A8%E9%87%8D%E5%AE%9A%E5%90%91%E8%BE%93%E5%87%BA%E6%97%B6%E5%8D%A1%E4%BD%8F/</loc>
     <lastmod>2014-02-22T10:30:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-02-11-try-rollback-master-back-to-slave-by-mysql-plugin</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%B0%9D%E8%AF%95%E4%BD%BF%E7%94%A8mysql-plugin%E5%B0%86reset-slave%E5%90%8E%E7%9A%84%E8%8A%82%E7%82%B9%E9%87%8D%E6%96%B0%E6%81%A2%E5%A4%8D%E6%88%90slave/</loc>
     <lastmod>2014-02-11T22:31:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-01-28-compile-mysql-plugin</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E7%BC%96%E8%AF%91mysql%E6%8F%92%E4%BB%B6%E7%9A%84%E7%A2%B0%E5%88%B0%E7%9A%84%E9%97%AE%E9%A2%98/</loc>
     <lastmod>2014-01-28T16:48:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2014-01-08-jruby-bug-tcp-timeout</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/jruby%E4%B8%ADtcp%E9%98%BB%E5%A1%9E%E6%97%B6timeouttimeout%E5%A4%B1%E6%95%88/</loc>
     <lastmod>2014-01-08T23:04:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-12-26-go-iterate-variable</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E6%A0%BD%E5%9C%A8go%E4%B8%ADfor%E7%9A%84%E5%8F%98%E9%87%8F/</loc>
     <lastmod>2013-12-26T22:13:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-12-19-paxos-lease</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9%E4%BA%8Epaxoslease%E7%9A%84%E4%B8%AA%E4%BA%BA%E7%90%86%E8%A7%A3-2/</loc>
     <lastmod>2013-12-19T20:19:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-12-21-paxos-lease-2</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9%E4%BA%8Epaxoslease%E7%9A%84%E4%B8%AA%E4%BA%BA%E7%90%86%E8%A7%A3-1/</loc>
     <lastmod>2013-12-19T20:19:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-12-09-test-framework-exp</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%85%B3%E4%BA%8Edev%E6%B5%8B%E8%AF%95%E7%9A%84%E4%B8%80%E4%BA%9B%E7%BB%8F%E9%AA%8C%E6%80%BB%E7%BB%93/</loc>
     <lastmod>2013-12-09T20:05:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-11-11-study-memory-reorder-cont</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9memory-reordering-caught-in-the-act%E7%9A%84%E5%AD%A6%E4%B9%A0-%E7%BB%AD---%E5%85%B3%E4%BA%8Ego%E7%9A%84%E9%83%A8%E5%88%86/</loc>
     <lastmod>2013-11-11T20:44:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-11-07-study-memory-reorder</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9memory-reordering-caught-in-the-act%E7%9A%84%E5%AD%A6%E4%B9%A0/</loc>
     <lastmod>2013-11-07T21:40:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-11-05-accrual-failure-detector</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9heartbeat-%CF%86%E7%B4%AF%E7%A7%AF%E5%A4%B1%E8%B4%A5%E6%A3%80%E6%B5%8B%E7%AE%97%E6%B3%95%E7%9A%84%E5%AD%A6%E4%B9%A0/</loc>
     <lastmod>2013-11-05T21:50:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-10-25-study-mysql-bug-70307</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9mysql-bug-70307-%E7%9A%84%E5%AD%A6%E4%B9%A0/</loc>
     <lastmod>2013-10-25T22:00:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-10-22-mysql-flush-logs-make-two-relay-log-file</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/mysql-5.6.12-master%E4%B8%8Aflush-logs%E5%9C%A8slave%E4%B8%8A%E4%BA%A7%E7%94%9F%E4%B8%A4%E4%B8%AArelay-log/</loc>
     <lastmod>2013-10-22T21:42:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-10-20-mysql-handle_slave_io-src</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/mysql-rpl_slave.cchandle_slave_io-%E6%BA%90%E7%A0%81%E7%9A%84%E4%B8%80%E4%BA%9B%E4%B8%AA%E4%BA%BA%E5%88%86%E6%9E%90/</loc>
     <lastmod>2013-10-20T20:17:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-10-16-mysql-mysql_binlog_send-src</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/mysql-rpl_master.ccmysql_binlog_send-%E6%BA%90%E7%A0%81%E7%9A%84%E4%B8%80%E4%BA%9B%E4%B8%AA%E4%BA%BA%E5%88%86%E6%9E%90%E5%92%8C%E5%90%90%E6%A7%BD/</loc>
     <lastmod>2013-10-16T22:50:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-10-14-mha-failover</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/mha-failover%E6%97%B6%E5%81%9A%E4%BA%86%E4%BA%9B%E5%95%A5/</loc>
     <lastmod>2013-10-14T21:39:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-10-11-jruby-175-jre-6-stdin-bug</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/jruby-backtick--jre-6-%E4%BC%9A%E5%8D%A1%E4%BD%8F/</loc>
     <lastmod>2013-10-11T22:03:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-10-11-hole-in-mysql-56-replication-dead-lock</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/mysql-5.6.15-replication%E4%B8%AD%E7%A2%B0%E5%88%B0%E7%9A%84%E6%AD%BB%E9%94%81/</loc>
     <lastmod>2013-10-11T21:21:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-08-29-rewrite-project-into-ruby</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/jruby%E9%87%8D%E5%86%99java%E9%A1%B9%E7%9B%AE%E7%9A%84%E4%B8%80%E4%BA%9B%E6%80%BB%E7%BB%93/</loc>
     <lastmod>2013-08-29T21:22:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-05-28-interesting-js</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E6%9C%89%E6%84%8F%E6%80%9D%E7%9A%84javascript%E7%AC%94%E8%AF%AF/</loc>
     <lastmod>2013-05-28T22:33:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-05-18-java-offheap-memory</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/java-off-heap%E7%9A%84%E4%B8%80%E4%BA%9B%E5%8F%82%E8%80%83/</loc>
     <lastmod>2013-05-18T23:00:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-05-13-mysql-master-slave-standby-failover</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AE%9E%E9%AA%8Cmysql-master-slave-standby%E5%B0%86source%E4%BB%8Emaster%E5%88%87%E6%8D%A2%E5%88%B0standby/</loc>
     <lastmod>2013-05-15T22:40:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-05-12-mysql-binlog-study</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%85%B3%E4%BA%8Emysql-binlog%E7%9A%84%E4%B8%80%E7%82%B9%E5%AD%A6%E4%B9%A0/</loc>
     <lastmod>2013-05-12T22:59:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-04-16-lisp-symbol-upper-case</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/lisp%E4%B8%80%E4%B8%AA%E5%A4%A7%E5%86%99%E7%9A%84%E5%9D%91/</loc>
     <lastmod>2013-04-16T23:12:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-03-31-java-method-passing</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E6%88%91%E5%86%99%E4%BA%86%E5%8D%8A%E8%BE%88%E5%AD%90%E7%A8%8B%E5%BA%8F--java%E7%9A%84%E9%87%8D%E8%BD%BD%E6%96%B9%E6%B3%95%E9%80%89%E6%8B%A9%E5%9F%BA%E4%BA%8E%E7%BC%96%E8%AF%91%E6%9C%9F%E5%8F%82%E6%95%B0%E7%B1%BB%E5%9E%8B/</loc>
     <lastmod>2013-03-31T23:22:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-03-19-some-readings-about-localStorage</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E8%AF%BB%E4%BA%86there-is-no-simple-solution-for-local-storage/</loc>
     <lastmod>2013-03-19T23:35:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-03-18-lisp-quote-backquote</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E7%95%A5%E5%AD%A6%E4%B9%A0lisp%E7%9A%84quote%E5%92%8Cbackquote/</loc>
     <lastmod>2013-03-18T23:59:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-03-17-jquery-noconflict</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E8%AF%BB%E4%BA%86%E8%B0%88%E8%B0%88-jquery-%E4%B8%AD%E7%9A%84%E9%98%B2%E5%86%B2%E7%AA%81noconflict%E6%9C%BA%E5%88%B6/</loc>
     <lastmod>2013-03-17T23:49:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-03-14-read-write-lock-read-reentrant</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E8%AF%BB%E5%86%99%E9%94%81-%E8%AF%BB%E5%8F%AF%E9%87%8D%E5%85%A5/</loc>
     <lastmod>2013-03-14T21:37:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-03-13-reentrant-lock</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%8F%AF%E9%87%8D%E5%85%A5lock/</loc>
     <lastmod>2013-03-13T23:01:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-03-13-notify-and-notify-all</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/thread-notify-%E5%92%8C-notifyall/</loc>
     <lastmod>2013-03-13T21:47:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-03-11-thread-wait-sleep</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/thread-wait-%E5%92%8C-sleep/</loc>
     <lastmod>2013-03-11T22:32:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-03-10-false-sharing-0</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/false-sharing-%E9%98%85%E8%AF%BB/</loc>
     <lastmod>2013-03-10T23:40:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-03-05-chrome-workspace</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/chrome-workspace%E5%92%8Cfile-mapping%E7%9A%84%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95/</loc>
     <lastmod>2013-03-05T22:21:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-02-28-lisp-book</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/%E5%9C%A8%E8%AF%BBlisp%E5%85%A5%E9%97%A8/</loc>
     <lastmod>2013-02-28T00:20:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-02-21-git-study</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/git%E5%85%A5%E9%97%A8/</loc>
     <lastmod>2013-02-21T21:10:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-02-14-css-clear</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/css-clear%E5%B1%9E%E6%80%A7/</loc>
     <lastmod>2013-02-14T23:00:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-02-04-Q-uncurry-safe-meta-programming</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/q%E6%BA%90%E7%A0%81%E9%87%8Cuncurry%E5%87%BD%E6%95%B0%E5%88%86%E6%9E%90/</loc>
     <lastmod>2013-02-04T23:04:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-02-04-octopress-chinese-character</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/octopress-win7%E4%B8%8A%E9%81%AD%E9%81%87invalid-gbk-character-exception/</loc>
     <lastmod>2013-02-04T21:59:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-02-04-css-compressor-bug</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/css-compressor-bug/</loc>
     <lastmod>2013-02-04T21:49:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-02-03-javascript-quiz-from-nicolas-c-zakas</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/javascript-quiz-from-nicolas-c.zakas/</loc>
     <lastmod>2013-02-03T23:36:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-01-29-generate-asm-java-from-classfile</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/org.ow2.asm-%E9%80%9A%E8%BF%87%E7%B1%BB.class%E4%BA%A7%E7%94%9Fasm-java%E4%BB%A3%E7%A0%81/</loc>
     <lastmod>2013-01-29T23:00:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-01-28-javascript-multiline-html</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/javascript%E4%B8%AD%E5%86%99%E5%A4%9A%E8%A1%8Chtml/</loc>
     <lastmod>2013-01-28T23:00:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-01-27-TProfiler-basic</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/tprofiler%E7%9A%84%E5%9F%BA%E6%9C%AC%E5%8E%9F%E7%90%86/</loc>
     <lastmod>2013-01-27T23:59:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-01-27-Q-nextTick</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/q%E5%85%B3%E4%BA%8Enexttick%E7%9A%84%E5%AE%9E%E7%8E%B0/</loc>
     <lastmod>2013-01-27T23:00:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/post/2013-01-26-hello-world</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/hello-world/</loc>
     <lastmod>2013-01-26T23:00:00+00:00</lastmod>
   </url>
   

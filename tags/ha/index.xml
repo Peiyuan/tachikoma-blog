@@ -11,10 +11,10 @@
     
     <item>
       <title>MHA failover时做了些啥</title>
-      <link>http://ikarishinjieva.github.io/post/2013-10-14-mha-failover</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/mha-failover%E6%97%B6%E5%81%9A%E4%BA%86%E4%BA%9B%E5%95%A5/</link>
       <pubDate>Mon, 14 Oct 2013 21:39:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-10-14-mha-failover</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/mha-failover%E6%97%B6%E5%81%9A%E4%BA%86%E4%BA%9B%E5%95%A5/</guid>
       <description>
 
 &lt;p&gt;读了MHA failover部分的源码整理一下&lt;/p&gt;

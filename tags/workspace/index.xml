@@ -11,10 +11,10 @@
     
     <item>
       <title>Thread wait 和 sleep</title>
-      <link>http://ikarishinjieva.github.io/post/2013-03-11-thread-wait-sleep</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/thread-wait-%E5%92%8C-sleep/</link>
       <pubDate>Mon, 11 Mar 2013 22:32:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-03-11-thread-wait-sleep</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/thread-wait-%E5%92%8C-sleep/</guid>
       <description>&lt;p&gt;ifeve上发现几个多线程的&lt;a href=&#34;http://ifeve.com/javaconcurrency-interview-questions-base/&#34;&gt;基础问题&lt;/a&gt;。我一直不写多线程（我这两年到底都写了些什么~），重头学起。&lt;/p&gt;
 
 &lt;p&gt;sleep和wait的区别。sleep让出cpu，等一段时间，重新进入竞争，不释放锁。wait等一个状态notify，才重新进入竞争，但释放锁。&lt;/p&gt;
@@ -121,10 +121,10 @@ public class MultiThread2 {
     
     <item>
       <title>Chrome Workspace和File Mapping的使用方法</title>
-      <link>http://ikarishinjieva.github.io/post/2013-03-05-chrome-workspace</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/chrome-workspace%E5%92%8Cfile-mapping%E7%9A%84%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95/</link>
       <pubDate>Tue, 05 Mar 2013 22:21:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-03-05-chrome-workspace</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/chrome-workspace%E5%92%8Cfile-mapping%E7%9A%84%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95/</guid>
       <description>
 
 &lt;p&gt;前几天微博上一直在转Chrome browser引进了workspace的功能，可以在developer tools里直接进行源码编辑。&lt;/p&gt;

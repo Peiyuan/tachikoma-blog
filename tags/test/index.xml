@@ -11,10 +11,10 @@
     
     <item>
       <title>关于DEV测试的一些经验总结</title>
-      <link>http://ikarishinjieva.github.io/post/2013-12-09-test-framework-exp</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E5%85%B3%E4%BA%8Edev%E6%B5%8B%E8%AF%95%E7%9A%84%E4%B8%80%E4%BA%9B%E7%BB%8F%E9%AA%8C%E6%80%BB%E7%BB%93/</link>
       <pubDate>Mon, 09 Dec 2013 20:05:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-12-09-test-framework-exp</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E5%85%B3%E4%BA%8Edev%E6%B5%8B%E8%AF%95%E7%9A%84%E4%B8%80%E4%BA%9B%E7%BB%8F%E9%AA%8C%E6%80%BB%E7%BB%93/</guid>
       <description>&lt;p&gt;已经是第三遍重写项目主代码了，这几天用主代码和测试框架互相补充。总结下经验值，以期升级&lt;/p&gt;
 
 &lt;hr /&gt;

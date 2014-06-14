@@ -11,10 +11,10 @@
     
     <item>
       <title>lisp一个大写的坑</title>
-      <link>http://ikarishinjieva.github.io/post/2013-04-16-lisp-symbol-upper-case</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/lisp%E4%B8%80%E4%B8%AA%E5%A4%A7%E5%86%99%E7%9A%84%E5%9D%91/</link>
       <pubDate>Tue, 16 Apr 2013 23:12:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-04-16-lisp-symbol-upper-case</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/lisp%E4%B8%80%E4%B8%AA%E5%A4%A7%E5%86%99%E7%9A%84%E5%9D%91/</guid>
       <description>&lt;p&gt;最近一直掉在一个坑里，今天刚出坑&lt;/p&gt;
 
 &lt;p&gt;想用宏定义不同的函数，类似于:&lt;/p&gt;
@@ -54,10 +54,10 @@ TEST
     
     <item>
       <title>略学习Lisp的quote和backquote</title>
-      <link>http://ikarishinjieva.github.io/post/2013-03-18-lisp-quote-backquote</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E7%95%A5%E5%AD%A6%E4%B9%A0lisp%E7%9A%84quote%E5%92%8Cbackquote/</link>
       <pubDate>Mon, 18 Mar 2013 23:59:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-03-18-lisp-quote-backquote</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E7%95%A5%E5%AD%A6%E4%B9%A0lisp%E7%9A%84quote%E5%92%8Cbackquote/</guid>
       <description>&lt;p&gt;略学习了lisp里面奇怪的符号集，解释这些符号上，人类的语言基本是苍白的。&lt;/p&gt;
 
 &lt;p&gt;&lt;a href=&#34;http://www.lispworks.com/documentation/HyperSpec/Body/02_df.htm&#34;&gt;第一份参考&lt;/a&gt;来自lispworks的文档，对[`&amp;lsquo;@,]这几种符号做了定义。&lt;/p&gt;
@@ -91,10 +91,10 @@ CL-USER&amp;gt; (let ((x `(1 2))) `(,x))
     
     <item>
       <title>在读lisp入门</title>
-      <link>http://ikarishinjieva.github.io/post/2013-02-28-lisp-book</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E5%9C%A8%E8%AF%BBlisp%E5%85%A5%E9%97%A8/</link>
       <pubDate>Thu, 28 Feb 2013 00:20:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-02-28-lisp-book</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E5%9C%A8%E8%AF%BBlisp%E5%85%A5%E9%97%A8/</guid>
       <description>&lt;p&gt;花了几天时间在读&lt;a href=&#34;http://book.douban.com/subject/11238123&#34;&gt;lisp的入门&lt;/a&gt;。&lt;/p&gt;
 
 &lt;p&gt;是本写得十分中肯的语言书。冗长，事无巨细，配图和代码样例精准。就算不看冗长的英文只看代码样例，也能了解个大概。对lisp辅助工具的介绍非常详尽，就算是programming ruby也没达到这个程度。习题丰富。&lt;/p&gt;

@@ -11,10 +11,10 @@
     
     <item>
       <title>CSS compressor bug</title>
-      <link>http://ikarishinjieva.github.io/post/2013-02-04-css-compressor-bug</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/css-compressor-bug/</link>
       <pubDate>Mon, 04 Feb 2013 21:49:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-02-04-css-compressor-bug</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/css-compressor-bug/</guid>
       <description>&lt;p&gt;使用&lt;a href=&#34;http://www.csscompressor.com/&#34;&gt;css compressor&lt;/a&gt; 压缩项目中的css，可以合并相同定义的style，但也引起了bug。&lt;/p&gt;
 
 &lt;p&gt;比如：&lt;/p&gt;

@@ -11,10 +11,10 @@
     
     <item>
       <title>Chrome Workspace和File Mapping的使用方法</title>
-      <link>http://ikarishinjieva.github.io/post/2013-03-05-chrome-workspace</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/chrome-workspace%E5%92%8Cfile-mapping%E7%9A%84%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95/</link>
       <pubDate>Tue, 05 Mar 2013 22:21:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-03-05-chrome-workspace</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/chrome-workspace%E5%92%8Cfile-mapping%E7%9A%84%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95/</guid>
       <description>
 
 &lt;p&gt;前几天微博上一直在转Chrome browser引进了workspace的功能，可以在developer tools里直接进行源码编辑。&lt;/p&gt;

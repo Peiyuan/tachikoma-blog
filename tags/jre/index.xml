@@ -11,10 +11,10 @@
     
     <item>
       <title>jruby backtick &#43; jre 6 会卡住</title>
-      <link>http://ikarishinjieva.github.io/post/2013-10-11-jruby-175-jre-6-stdin-bug</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/jruby-backtick--jre-6-%E4%BC%9A%E5%8D%A1%E4%BD%8F/</link>
       <pubDate>Fri, 11 Oct 2013 22:03:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-10-11-jruby-175-jre-6-stdin-bug</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/jruby-backtick--jre-6-%E4%BC%9A%E5%8D%A1%E4%BD%8F/</guid>
       <description>
 
 &lt;p&gt;最近在jruby 1.7.5 + jre 6上碰到的土亢&lt;/p&gt;

@@ -11,10 +11,10 @@
     
     <item>
       <title>读写锁-读可重入</title>
-      <link>http://ikarishinjieva.github.io/post/2013-03-14-read-write-lock-read-reentrant</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E8%AF%BB%E5%86%99%E9%94%81-%E8%AF%BB%E5%8F%AF%E9%87%8D%E5%85%A5/</link>
       <pubDate>Thu, 14 Mar 2013 21:37:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-03-14-read-write-lock-read-reentrant</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E8%AF%BB%E5%86%99%E9%94%81-%E8%AF%BB%E5%8F%AF%E9%87%8D%E5%85%A5/</guid>
       <description>&lt;p&gt;发现&lt;a href=&#34;http://tutorials.jenkov.com/java-concurrency/read-write-locks.html&#34;&gt;这篇文献&lt;/a&gt;描写读写锁和可重入性非常具体。&lt;/p&gt;
 
 &lt;p&gt;尝试实现文章中的读可重入的读写锁：&lt;/p&gt;
@@ -160,10 +160,10 @@ public class ReadWriteLockReadReentrant {
     
     <item>
       <title>可重入Lock</title>
-      <link>http://ikarishinjieva.github.io/post/2013-03-13-reentrant-lock</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E5%8F%AF%E9%87%8D%E5%85%A5lock/</link>
       <pubDate>Wed, 13 Mar 2013 23:01:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-03-13-reentrant-lock</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E5%8F%AF%E9%87%8D%E5%85%A5lock/</guid>
       <description>&lt;p&gt;参考：&lt;a href=&#34;http://book.douban.com/subject/10484692/&#34;&gt;Java并发编程实践&lt;/a&gt;&lt;/p&gt;
 
 &lt;p&gt;参考书里2.3.2对锁的重入性一句话搞定：“获取所得粒度是&amp;rdquo;线程&amp;rdquo;，而不是&amp;rdquo;调用&amp;rdquo;”&lt;/p&gt;
@@ -276,10 +276,10 @@ public class Reentrant3 {
     
     <item>
       <title>Thread Notify 和 NotifyAll</title>
-      <link>http://ikarishinjieva.github.io/post/2013-03-13-notify-and-notify-all</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/thread-notify-%E5%92%8C-notifyall/</link>
       <pubDate>Wed, 13 Mar 2013 21:47:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-03-13-notify-and-notify-all</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/thread-notify-%E5%92%8C-notifyall/</guid>
       <description>&lt;p&gt;参考：&lt;a href=&#34;http://blog.csdn.net/iceman1952/article/details/2159812&#34;&gt;http://blog.csdn.net/iceman1952/article/details/2159812&lt;/a&gt;&lt;/p&gt;
 
 &lt;pre&gt;&lt;code&gt;public class Notify {
@@ -323,10 +323,10 @@ public class Reentrant3 {
     
     <item>
       <title>Thread wait 和 sleep</title>
-      <link>http://ikarishinjieva.github.io/post/2013-03-11-thread-wait-sleep</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/thread-wait-%E5%92%8C-sleep/</link>
       <pubDate>Mon, 11 Mar 2013 22:32:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-03-11-thread-wait-sleep</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/thread-wait-%E5%92%8C-sleep/</guid>
       <description>&lt;p&gt;ifeve上发现几个多线程的&lt;a href=&#34;http://ifeve.com/javaconcurrency-interview-questions-base/&#34;&gt;基础问题&lt;/a&gt;。我一直不写多线程（我这两年到底都写了些什么~），重头学起。&lt;/p&gt;
 
 &lt;p&gt;sleep和wait的区别。sleep让出cpu，等一段时间，重新进入竞争，不释放锁。wait等一个状态notify，才重新进入竞争，但释放锁。&lt;/p&gt;
@@ -433,10 +433,10 @@ public class MultiThread2 {
     
     <item>
       <title>False Sharing 阅读</title>
-      <link>http://ikarishinjieva.github.io/post/2013-03-10-false-sharing-0</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/false-sharing-%E9%98%85%E8%AF%BB/</link>
       <pubDate>Sun, 10 Mar 2013 23:40:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-03-10-false-sharing-0</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/false-sharing-%E9%98%85%E8%AF%BB/</guid>
       <description>&lt;p&gt;应该说&lt;a href=&#34;http://ifeve.com/disruptor-cacheline-padding/&#34;&gt;这篇&lt;/a&gt;和&lt;a href=&#34;http://ifeve.com/false-sharing/&#34;&gt;这篇文章&lt;/a&gt;是最近读的最有意思的一篇文章，关于多线程访问时，内存预读到寄存器的内容产生的数据竞争(false sharing)对性能的影响(我已经不知道我在说什么了，文章里解释的很清楚)。&lt;/p&gt;
 
 &lt;p&gt;重做了第二篇里的试验，发现六个padding不够，需要七个padding(p7)才能有两倍的性能差异。(没有文献里说的那么离谱，测试环境的差异吧)&lt;/p&gt;

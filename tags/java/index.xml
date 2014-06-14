@@ -11,10 +11,10 @@
     
     <item>
       <title>jruby重写java项目的一些总结</title>
-      <link>http://ikarishinjieva.github.io/post/2013-08-29-rewrite-project-into-ruby</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/jruby%E9%87%8D%E5%86%99java%E9%A1%B9%E7%9B%AE%E7%9A%84%E4%B8%80%E4%BA%9B%E6%80%BB%E7%BB%93/</link>
       <pubDate>Thu, 29 Aug 2013 21:22:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-08-29-rewrite-project-into-ruby</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/jruby%E9%87%8D%E5%86%99java%E9%A1%B9%E7%9B%AE%E7%9A%84%E4%B8%80%E4%BA%9B%E6%80%BB%E7%BB%93/</guid>
       <description>
 
 &lt;p&gt;久不更新了，6月换了工作&lt;/p&gt;
@@ -162,10 +162,10 @@ end
     
     <item>
       <title>Java off-heap的一些参考</title>
-      <link>http://ikarishinjieva.github.io/post/2013-05-18-java-offheap-memory</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/java-off-heap%E7%9A%84%E4%B8%80%E4%BA%9B%E5%8F%82%E8%80%83/</link>
       <pubDate>Sat, 18 May 2013 23:00:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-05-18-java-offheap-memory</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/java-off-heap%E7%9A%84%E4%B8%80%E4%BA%9B%E5%8F%82%E8%80%83/</guid>
       <description>&lt;p&gt;读了Hazelcast的文档，很有意思的部分是&amp;rdquo;Elastic Memory&amp;rdquo;，为了减少GC，用到了java off-heap(off-heap允许Java直接操作内存空间, 类似于C的malloc和free)。之前孤陋寡闻，记录一些off-heap的参考。&lt;/p&gt;
 
 &lt;p&gt;.1.做了以下对比试验，来对比Heap和Non-heap&lt;/p&gt;
@@ -227,10 +227,10 @@ public class OffHeapAllocation {
     
     <item>
       <title>我写了半辈子程序 &amp; java的重载方法选择基于编译期参数类型</title>
-      <link>http://ikarishinjieva.github.io/post/2013-03-31-java-method-passing</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E6%88%91%E5%86%99%E4%BA%86%E5%8D%8A%E8%BE%88%E5%AD%90%E7%A8%8B%E5%BA%8F--java%E7%9A%84%E9%87%8D%E8%BD%BD%E6%96%B9%E6%B3%95%E9%80%89%E6%8B%A9%E5%9F%BA%E4%BA%8E%E7%BC%96%E8%AF%91%E6%9C%9F%E5%8F%82%E6%95%B0%E7%B1%BB%E5%9E%8B/</link>
       <pubDate>Sun, 31 Mar 2013 23:22:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-03-31-java-method-passing</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E6%88%91%E5%86%99%E4%BA%86%E5%8D%8A%E8%BE%88%E5%AD%90%E7%A8%8B%E5%BA%8F--java%E7%9A%84%E9%87%8D%E8%BD%BD%E6%96%B9%E6%B3%95%E9%80%89%E6%8B%A9%E5%9F%BA%E4%BA%8E%E7%BC%96%E8%AF%91%E6%9C%9F%E5%8F%82%E6%95%B0%E7%B1%BB%E5%9E%8B/</guid>
       <description>&lt;p&gt;一段时间没更新过blog,因为花了些时间在读lisp的入门,还将继续一段时间&lt;/p&gt;
 
 &lt;p&gt;先庆祝下自己25岁,可以正式对外宣称&amp;rdquo;我写了半辈子程序&amp;rdquo;&lt;/p&gt;
@@ -274,10 +274,10 @@ public class C {
     
     <item>
       <title>org.ow2.asm 通过类.class产生asm java代码</title>
-      <link>http://ikarishinjieva.github.io/post/2013-01-29-generate-asm-java-from-classfile</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/org.ow2.asm-%E9%80%9A%E8%BF%87%E7%B1%BB.class%E4%BA%A7%E7%94%9Fasm-java%E4%BB%A3%E7%A0%81/</link>
       <pubDate>Tue, 29 Jan 2013 23:00:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2013-01-29-generate-asm-java-from-classfile</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/org.ow2.asm-%E9%80%9A%E8%BF%87%E7%B1%BB.class%E4%BA%A7%E7%94%9Fasm-java%E4%BB%A3%E7%A0%81/</guid>
       <description>&lt;p&gt;尝试给&lt;a href=&#34;https://github.com/taobao/TProfiler&#34;&gt;TProfiler&lt;/a&gt;写一些单元测试。难点是如何对byte code injection产生测试夹具。理想的状况是产生一些class byte code，通过transformer，将生成的class载入并测试行为。第一步产生class byte code的代码可以通过asm提供的工具生成:&lt;/p&gt;
 
 &lt;pre&gt;&lt;code&gt;java -classpath asm-all-4.1.jar org.objectweb.asm.util.ASMifier org/domain/package/YourClass.class

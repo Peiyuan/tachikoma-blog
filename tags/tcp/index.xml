@@ -11,10 +11,10 @@
     
     <item>
       <title>jruby中tcp阻塞时Timeout::timeout失效</title>
-      <link>http://ikarishinjieva.github.io/post/2014-01-08-jruby-bug-tcp-timeout</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/jruby%E4%B8%ADtcp%E9%98%BB%E5%A1%9E%E6%97%B6timeouttimeout%E5%A4%B1%E6%95%88/</link>
       <pubDate>Wed, 08 Jan 2014 23:04:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/post/2014-01-08-jruby-bug-tcp-timeout</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/jruby%E4%B8%ADtcp%E9%98%BB%E5%A1%9E%E6%97%B6timeouttimeout%E5%A4%B1%E6%95%88/</guid>
       <description>
 
 &lt;h2 id=&#34;toc_0&#34;&gt;问题场景&lt;/h2&gt;
