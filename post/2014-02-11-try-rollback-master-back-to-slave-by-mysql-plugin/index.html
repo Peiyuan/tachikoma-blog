@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> 尝试使用mysql plugin将RESET SLAVE后的节点重新恢复成slave &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>尝试使用mysql plugin将RESET SLAVE后的节点重新恢复成slave</h1>
+  <span class="post-date">Tue, Feb 11, 2014      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/mysql">mysql</a> </li>
+      
+        <li><a href="tags/mysql-plugin">mysql plugin</a> </li>
+      
+        <li><a href="tags/replication">replication</a> </li>
+      
+    </ul></span>
+      
+
+<p>这几天在尝试为以下场景制作一个mysql plugin, 但是是一个失败的尝试, 在此记录</p>
+
+<h2 id="toc_0">场景</h2>
+
+<pre><code>一对mysql主从节点 M-S, 节点S执行了RESET SLAVE
+后来后悔了
+在没有数据通过非replication的渠道写入S的条件下, 想让S和M重新恢复成一对主从
+</code></pre>
+
+<p>关键点是S能将<code>RESET SLAVE</code>时S的<code>Exec_Master_Log_Pos</code>和<code>S binlog pos</code>记录下来</p>
+
+<p>尝试了以下几种方案:</p>
+
+<h2 id="toc_1">调用者在<code>RESET SLAVE</code>时手工记录, 不需要制作插件</h2>
+
+<h2 id="toc_2">Audit plugin.</h2>
+
+<p>Mysql的Audit plugin可以审计大部分mysqld经手的SQL, 包括<code>RESET SLAVE</code>.</p>
+
+<p>但Audit plugin是在每个SQL之后才会调用. 在<code>RESET SLAVE</code>时S上master_info会被清理, 即<code>Exec_Master_Log_Pos</code>的信息在调用Audit plugin已经丢失</p>
+
+<h2 id="toc_3">Replication plugin (<code>after_reset_slave</code>)</h2>
+
+<p>Replication plugin (参看mysql semisync的源码), 在slave端提供了<code>Binlog_relay_IO_observer</code>, 贴个Mysql源码方便理解</p>
+
+<pre><code>/**
+    Observes and extends the service of slave IO thread.
+ */
+ typedef struct Binlog_relay_IO_observer {
+   uint32 len;
+
+   /**
+      This callback is called when slave IO thread starts
+
+      @param param Observer common parameter
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*thread_start)(Binlog_relay_IO_param *param);
+
+   /**
+      This callback is called when slave IO thread stops
+
+      @param param Observer common parameter
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*thread_stop)(Binlog_relay_IO_param *param);
+
+   /**
+      This callback is called before slave requesting binlog transmission from master
+
+      This is called before slave issuing BINLOG_DUMP command to master
+      to request binlog.
+
+      @param param Observer common parameter
+      @param flags binlog dump flags
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*before_request_transmit)(Binlog_relay_IO_param *param, uint32 flags);
+
+   /**
+      This callback is called after read an event packet from master
+
+      @param param Observer common parameter
+      @param packet The event packet read from master
+      @param len Length of the event packet read from master
+      @param event_buf The event packet return after process
+      @param event_len The length of event packet return after process
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*after_read_event)(Binlog_relay_IO_param *param,
+                           const char *packet, unsigned long len,
+                           const char **event_buf, unsigned long *event_len);
+
+   /**
+      This callback is called after written an event packet to relay log
+
+      @param param Observer common parameter
+      @param event_buf Event packet written to relay log
+      @param event_len Length of the event packet written to relay log
+      @param flags flags for relay log
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*after_queue_event)(Binlog_relay_IO_param *param,
+                            const char *event_buf, unsigned long event_len,
+                            uint32 flags);
+
+   /**
+      This callback is called after reset slave relay log IO status
+
+      @param param Observer common parameter
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*after_reset_slave)(Binlog_relay_IO_param *param);
+ } Binlog_relay_IO_observer;
+</code></pre>
+
+<p>首先尝试用<code>after_reset_slave</code>, 从函数名字就可以看到会遇到和Audit Plugin相同的问题: 即<code>Exec_Master_Log_Pos</code>的信息在调用时已经丢失</p>
+
+<h2 id="toc_4">Replication plugin (<code>after_reset_slave</code>再尝试, <code>future_group_master_log_pos</code>)</h2>
+
+<p>还不死心, <code>Exec_Master_Log_Pos</code>的数据结构是<code>Relay_log_info.group_master_log_pos</code>, 尽管这个信息在<code>after_reset_slave</code>时已经丢失, 但发现<code>Relay_log_info.future_group_master_log_pos</code>可能是个方向</p>
+
+<p>先解释<code>Relay_log_info.future_group_master_log_pos</code>, 可以参看<code>log_event.cc</code>的这段注释</p>
+
+<pre><code>  /*
+    InnoDB internally stores the master log position it has executed so far,
+    i.e. the position just after the COMMIT event.
+    When InnoDB will want to store, the positions in rli won't have
+    been updated yet, so group_master_log_* will point to old BEGIN
+    and event_master_log* will point to the beginning of current COMMIT.
+    But log_pos of the COMMIT Query event is what we want, i.e. the pos of the
+    END of the current log event (COMMIT). We save it in rli so that InnoDB can
+    access it.
+  */
+  const_cast&lt;Relay_log_info*&gt;(rli)-&gt;future_group_master_log_pos= log_pos;
+</code></pre>
+
+<p><code>future_group_master_log_pos</code>指向了execute的最后一个transaction的COMMIT event之前, 即<code>future_group_master_log_pos</code> 大部分时间等于 <code>group_master_log_pos - 27</code> (27是COMMIT event的长度)</p>
+
+<p>但仍有例外情况: 如果M执行了<code>FLUSH LOGS</code>, 将log从0001递增到了0002, 此时S上的<code>future_group_master_log_pos</code>会指向0001的最后一个transaction的COMMIT event之前. 但S上的<code>group_master_log_name</code>已经到了0002, 与<code>future_group_master_log_pos</code>不匹配, 会引起异常</p>
+
+<p>(其实此时S上的<code>group_master_log_name</code>也已经置空了, 但可以从内存残片中恢复出文件名)</p>
+
+<p>设想如果对于log_name也有<code>future_group_master_log_name</code>, 那么S可以直接<code>change master</code>到M的<code>future_group_master_log_name</code>和<code>future_group_master_log_pos</code>位置, 可以恢复起M-S主从结构</p>
+
+<h2 id="toc_5">Replication plugin (<code>thread_stop</code>)</h2>
+
+<p>Replication plugin的<code>thread_stop</code>是指Slave IO thread停止时调用, 此时可以拿到<code>Exec_Master_Log_Pos</code>和<code>S binlog pos</code>, 但拿到的<code>S binlog pos</code>没有意义, 因为不能保证Slave SQL thread也停下来了</p>
+
+<h2 id="toc_6">Storage Engine plugin</h2>
+
+<p>这是我最后一根救命稻草, 阅读Mysql源码时注意到以下片段(做了缩减)</p>
+
+<pre><code>int reset_slave(THD *thd, Master_info* mi)
+{
+    ...
+    ha_reset_slave(thd);
+    ... //clean memory data
+}
+</code></pre>
+
+<p><code>reset_slave</code>在清理内存数据前通知了storage engine插件, 这个插件可以获得所有必要信息</p>
+
+<p>但存在一个问题, 即<code>ha_reset_slave</code>仅在Mysql NDB版本中存在, 不具备通用性, 参看宏定义(做了缩减)</p>
+
+<pre><code>#ifdef HAVE_NDB_BINLOG
+...
+void ha_reset_slave(THD *thd);
+...
+#else
+...
+#define ha_reset_slave(a) do {} while (0)
+...
+#endif
+</code></pre>
+
+<h2 id="toc_7">吐槽和总结</h2>
+
+<p>可以看到Mysql plugin不<strong>太</strong>预留接口, 是仅仅为已知应用场景提供必要接口, 比如<code>Binlog_relay_IO_observer</code>中有<code>after</code>不一定有<code>before</code>. 比较容易控制插件质量, 但插件能做到的非常局限.</p>
+
+<p>以上各种尝试, 归根到底, 只要修改Mysql的一点源码编译一下就可以达到很好的效果, 不需要用插件的方式在Mysql中到处找功能插槽, 但通用性变差.</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Octopress on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/octopress/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Mon, 04 Feb 2013 21:59:00 UTC</updated>
+    
+    <item>
+      <title>octopress win7上遭遇invalid GBK character exception</title>
+      <link>http://ikarishinjieva.github.io/post/2013-02-04-octopress-chinese-character</link>
+      <pubDate>Mon, 04 Feb 2013 21:59:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-02-04-octopress-chinese-character</guid>
+      <description>&lt;p&gt;解决方案：
+将markdown文件保存格式设为 UTF-8 without BOM，并
+在环境变量里加上 LC_ALL=zh_CN.UTF-8&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> Chrome Workspace和File Mapping的使用方法 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>Chrome Workspace和File Mapping的使用方法</h1>
+  <span class="post-date">Tue, Mar 5, 2013      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/chrome">chrome</a> </li>
+      
+        <li><a href="tags/workspace">workspace</a> </li>
+      
+    </ul></span>
+      
+
+<p>前几天微博上一直在转Chrome browser引进了workspace的功能，可以在developer tools里直接进行源码编辑。</p>
+
+<p>但是迄今为止搜索到的文档都没有详细描述使用步骤和限制，36kr上的<a href="http://www.36kr.com/p/201304.html">这篇guide</a>也没有关于mapping的描述，更没有一些坑描述。</p>
+
+<p>翻看了Chromium的源代码，将使用步骤和在Windows下的坑描述一下。(截止20130305，这个步骤还是很新的)。</p>
+
+<h2 id="toc_0">浏览器版本</h2>
+
+<p>如果是Chrome(谷歌浏览器)，只有开发者分支上有这个功能，地址<a href="https://www.google.com/intl/en/chrome/browser/index.html?extra=devchannel#eula">在此</a></p>
+
+<p>如果是Canary或者Chromium，都有这个功能。</p>
+
+<h2 id="toc_1">使用步骤</h2>
+
+<ol>
+<li>开启&rdquo;开发者工具实验&rdquo;(这翻译真心烂&hellip;): 在browser输入chrome://flags/，启用&rdquo;开发者工具实验&rdquo;</li>
+</ol>
+
+<p><img src="../../blog-img/2013-03-05-chrome-workspace-1.png" alt="启用&quot;开发者工具实验&quot;" title="启用'开发者工具实验'" />
+</p>
+
+<ol>
+<li><p>重启chrome</p></li>
+
+<li><p>打开要调试的site，进入Developer tools的setting
+<img src="../../blog-img/2013-03-05-chrome-workspace-2.png" alt="进入Developer tools的setting" title="进入Developer tools的setting" />
+</p></li>
+
+<li><p>启用Workspace功能 (Developer tools -&gt; setting -&gt; Experiments -&gt; File system folders in Sources Panel)
+<img src="../../blog-img/2013-03-05-chrome-workspace-3.png" alt="启用Workspace功能" title="启用Workspace功能" />
+</p></li>
+
+<li><p>重启Developer Tools, 可以看到Settings里Workspace页
+<img src="../../blog-img/2013-03-05-chrome-workspace-4.png" alt="Settings里Workspace页" title="Settings里Workspace页" />
+</p></li>
+
+<li><p>假设源js的目录为c:\test, 需要现在这个目录下创建空文件.allow-devtools-edit, browser才会认可这个为源文件夹
+<img src="../../blog-img/2013-03-05-chrome-workspace-5.png" alt="创建空文件.allow-devtools-edit" title="创建空文件.allow-devtools-edit" />
+</p></li>
+
+<li><p>在Developer tool -&gt; setting -&gt;Workspace -&gt; File system里，添加源js的目录
+<img src="../../blog-img/2013-03-05-chrome-workspace-6.png" alt="添加源js的目录" title="添加源js的目录" />
+</p></li>
+
+<li><p>重启Developer Tools, 可以在Sources页里看到本地folder
+<img src="../../blog-img/2013-03-05-chrome-workspace-7.png" alt="可以在Sources页里看到本地folder" title="可以在Sources页里看到本地folder" />
+</p></li>
+
+<li><p>此时在Chrome用Ctrl + O打开文件列表，可以看到两个相同的文件，一个是远端，一个是本地。在本地文件上打断点没有作用
+<img src="../../blog-img/2013-03-05-chrome-workspace-8.png" alt="Ctrl + O打开文件列表，可以看到两个相同的文件" title="Ctrl + O打开文件列表，可以看到两个相同的文件" />
+</p></li>
+
+<li><p>在Developer tool -&gt; setting -&gt;Workspace -&gt; Mappings里，添加mapping：</p></li>
+</ol>
+
+<p><code>http://localhost:7001/.../js/slickgrid C:\test</code></p>
+
+<p><em>URL是以http开头的完整路径，url和path都万万不要以/结尾，虽然添加后会自动显示为以/结尾。千万注意大小写会坑爹，要保持mapping和folder的大小写一致</em>
+<img src="../../blog-img/2013-03-05-chrome-workspace-9.png" alt="添加mapping" title="添加mapping" />
+</p>
+
+<ol>
+<li>此时，用Ctrl + O打开文件列表，只能看到一个文件，在本地文件上可以打断点(此处有坑，请阅读坑部分)，对本地文件的修改也会灵验的(直接反应在C:\test中)。</li>
+</ol>
+
+<h2 id="toc_2">坑</h2>
+
+<ol>
+<li>千万别在mapping的路径后加&rsquo;/&lsquo;（保存时会自动加上去），否则可能mapping不上。</li>
+<li>大小写会坑爹，千万保持mapping和folder的大小写一致。</li>
+<li>如果你的远端文件路径带参数，比如 <code>http://xxx/js/1.js?d=1</code>，断点不会触发。已经<a href="https://code.google.com/p/chromium/issues/detail?id=180202">报了个bug</a></li>
+</ol>
+
+<p>应该说workspace是挺有用的功能，不过由于坑3，在项目中的运用不畅。本想自己修修，发现这个bug涉及c++代码，表示放弃。</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

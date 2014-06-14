@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>False_sharing on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/false_sharing/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Sun, 10 Mar 2013 23:40:00 UTC</updated>
+    
+    <item>
+      <title>False Sharing 阅读</title>
+      <link>http://ikarishinjieva.github.io/post/2013-03-10-false-sharing-0</link>
+      <pubDate>Sun, 10 Mar 2013 23:40:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-03-10-false-sharing-0</guid>
+      <description>&lt;p&gt;应该说&lt;a href=&#34;http://ifeve.com/disruptor-cacheline-padding/&#34;&gt;这篇&lt;/a&gt;和&lt;a href=&#34;http://ifeve.com/false-sharing/&#34;&gt;这篇文章&lt;/a&gt;是最近读的最有意思的一篇文章，关于多线程访问时，内存预读到寄存器的内容产生的数据竞争(false sharing)对性能的影响(我已经不知道我在说什么了，文章里解释的很清楚)。&lt;/p&gt;
+
+&lt;p&gt;重做了第二篇里的试验，发现六个padding不够，需要七个padding(p7)才能有两倍的性能差异。(没有文献里说的那么离谱，测试环境的差异吧)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;public long p1, p2, p3, p4, p5, p6; // comment out
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;del&gt;TODO：了解第七个padding的来源&lt;/del&gt;&lt;/p&gt;
+
+&lt;p&gt;看了第二篇文章的&lt;a href=&#34;http://ifeve.com/false-shareing-java-7-cn/&#34;&gt;更新篇&lt;/a&gt;, 用这个稳定的代码跑测试，就不会有之前p7的问题。（可能是之前p1-p6被优化掉了？不解。）&lt;/p&gt;
+
+&lt;p&gt;在公司八核的机器上也测过，性能提升也就在2-4倍左右。没有那么夸张。&lt;/p&gt;
+
+&lt;p&gt;原理基本清楚，对不同平台间的差异完全没想法。不做深入了解。&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

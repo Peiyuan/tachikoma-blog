@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Paxos-Lease on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/paxos-lease/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Thu, 19 Dec 2013 20:19:00 UTC</updated>
+    
+    <item>
+      <title>对于PaxosLease的个人理解 1</title>
+      <link>http://ikarishinjieva.github.io/post/2013-12-19-paxos-lease</link>
+      <pubDate>Thu, 19 Dec 2013 20:19:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-12-19-paxos-lease</guid>
+      <description>
+
+&lt;p&gt;Paxos是分布式解决数据一致性的算法，而PaxosLease是Paxos中的一个子集，用于在集群中选择出一个节点作为master&lt;/p&gt;
+
+&lt;p&gt;最近因为项目需要，实现了一下PaxosLease，代码放在&lt;a href=&#34;https://github.com/ikarishinjieva/PaxosLease-go&#34;&gt;Github&lt;/a&gt;上&lt;/p&gt;
+
+&lt;p&gt;计划用两篇blog，分别记录下自己对PaxosLease的理解，以及对PaxosLease应用时的一些变化。&lt;br/&gt;这篇是我对PaxosLease的个人理解，如有任何bug/改进的建议，欢迎comment&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;首先，定义一下问题场景：有N个节点组成一个集群，需要从其中选出一个master。（其中可能遇到节点间传输的信息延迟/丢失，节点离线，网络脑裂等等状况）&lt;/p&gt;
+
+&lt;p&gt;在这个定义中，先要解决如何定义“选出一个master”，有以下几种可能&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;仅有master节点知道自己是master，其他节点只知道自己不是master，而不知道谁是master&lt;/li&gt;
+&lt;li&gt;所有在线节点都知道谁是master，离线节点上线后要等待下次选举&lt;/li&gt;
+&lt;li&gt;所有节点都知道谁是master，离线节点上线后要立刻学习谁是master&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;PaxosLease选择的是第一种方式（在此只讨论没有Learner的情况，有Learner的情况可以实现另外两种情况），这种方式满足现在的项目需要&lt;/p&gt;
+
+&lt;p&gt;这一个部分的结论：在以上的定义下，PaxosLease需要满足一个*不定式*：在同一时间，集群内至多有一个节点认为自己是master&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;要在多个节点达成一致，最通常的想法是二段提交（2-phase commit，2PC），经典2PC步骤是：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;某节点A向其他所有节点发起PrepareRequest（准备请求）&lt;/li&gt;
+&lt;li&gt;某节点B收到节点A的PrepareRequest，经过状态检查，将自己的状态置为PrepareReady（表示可以接受A的PrepareRequest）&lt;br/&gt;并向A发送PrepareResponse（准备请求的回复）&lt;/li&gt;
+&lt;li&gt;A收到其他节点发来的PrepareResponse，当满足*某个条件*时，A认为集群整体同意了他得PrepareRequest。&lt;br/&gt;于是A向其他所有节点发出CommitRequest（提交请求）&lt;/li&gt;
+&lt;li&gt;节点B收到A的CommitRequest，且检查到*当前状态是为A准备的状态*，则向A发送CommitResponse（提交回复）&lt;/li&gt;
+&lt;li&gt;A收到其他节点发来的CommitResponse，当满足*某个条件*时，A认为集群已经完成了提交&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;img src=&#34;../../blog-img/2013-12-19-paxos-lease-1.png&#34; alt=&#34;img&#34; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;但经典的2PC没有以下解决的问题：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;如何处理网络脑裂&lt;/li&gt;
+&lt;li&gt;如何解决master突然离线，比如网络故障&lt;/li&gt;
+&lt;li&gt;如何面对选举过程中通信可能发生的延迟和中断&lt;/li&gt;
+&lt;li&gt;是否会发生动态死锁&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;这一部分先解决网络脑裂的问题。比如有5个节点的集群，分割为[1,2]和[3,4,5]，那么在[1,2]子集群中不能选举出master，而在[3,4,5]子集群中必须要选举出master。若脑裂前master落在[1,2]，那么租约到期后，[1,2]不能选举出master&lt;/p&gt;
+
+&lt;p&gt;解决方案是：指定2PC步骤中的*某个条件*为“收到集群中超过集群节点数一半的节点（多数派）的正反馈”。那么[3,4,5]子集群可能选出master，而[1,2]由于只有2个节点，小于ceil(5/2) = 3，没法选出master&lt;/p&gt;
+
+&lt;p&gt;在此，我们称一个集群中，超过集群节点数一半的节点集合为多数派&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;这一部分将解决master突然离线的问题。根据*不变式*，除了master本身，没有节点知道谁是master。在这种情况下，如果不做点什么，集群就不会再有master了&lt;/p&gt;
+
+&lt;p&gt;解决方案是使用租约，即谁持有租约谁是master。
+&lt;br/&gt;由于是多数派选举master时，选举出master时，多数派的每个节点都会开始一个定时器，时长和租约时长相同
+&lt;br/&gt;于是在租约过期前，多数派的定时器都不会超时，多数派不会参与投票，即集群选不出新的master
+&lt;br/&gt;那么在租约过期后，多数派的定时器都超时，可以投票，集群就可以重新选举出master
+&lt;br/&gt;整个过程与离线的master没有任何交互，也就可以在master离线时选举出新的master&lt;/p&gt;
+
+&lt;p&gt;且整个过程中，租约到期前（多数派定时器超时前），集群不会有两个master同时存在，即满足&lt;em&gt;不定式&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;以上*等到租约过期*的做法有一个前提，即所有节点都知道统一的租约时长 （此处是时长，而不是过期时间。PaxosLease并不要求各个节点时钟同步，因此必须使用时长）。这是时长往往是静态配置，而不是动态协商的&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;这一部分将解决选举过程中通信可能发生延迟。&lt;/p&gt;
+
+&lt;p&gt;发生延迟意味着A-B已经进入了下一轮投票，C可能才完成上一轮投票，C的反馈可能影响到这一轮投票结果。&lt;/p&gt;
+
+&lt;p&gt;此处PaxosLease引入了投票ID（PaxosLease称ProposeId，后面会统一名称的）的概念，投票ID对于某一节点A，在全局是单调递增的。常用的投票ID结构为&amp;lt;投票轮数 | 重启计数 | 节点ID&amp;gt;（“|”为字符串拼接），这个ID可以被持久化存储，即新一轮投票或节点重启时投票ID都会单调递增。&lt;/p&gt;
+
+&lt;p&gt;有了投票ID，那么节点可以只响应本轮的反馈，而不受其他轮的干扰。&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;这一部分将解决选举过程中通信可能发生中断。&lt;/p&gt;
+
+&lt;p&gt;发生中断意味着2PC某阶段会一直等待多数派的反馈，但反馈都丢失了，于是选举可能被无限期拖延下去。很容易得出解决方案：设置超时时间。即在2PC每一个阶段都设置超时时间，若超时，则回退重新开始新一轮的2PC&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;这一部分将讨论如何解决动态死锁&lt;/p&gt;
+
+&lt;p&gt;首先说明何为动态死锁，比如有4个节点的集群[1,2,3,4]，1和4同时请求自己为master，1的request发给2，而4的request发给3，没有任何一方获得多数派，于是进入新的一轮，以上状况重复出现，陷入死循环，没法选出master&lt;/p&gt;
+
+&lt;p&gt;观察这个问题的症结在于，2收到1的prepare request后，进入PrepareReady状态，将不再接受4发来的请求。这样[1,2]和[3,4]不断对撞，陷入死锁。&lt;/p&gt;
+
+&lt;p&gt;解决方案是PaxosLease引入了“不稳定”的PrepareReady，即2进入为1准备的PrepareReady状态后，如果收到4的PrepareRequest，且这个投票ID大于来自1的PrepareRequest的投票ID，则2转而进入为4准备的PrepareReady&lt;/p&gt;
+
+&lt;p&gt;可以看到投票ID代表了优先级，也就能理解之前要求&lt;strong&gt;某节点&lt;/strong&gt;的投票ID单调递增的理由了&lt;/p&gt;
+
+&lt;p&gt;需要说明的是，上述做法只是大大降低动态死锁的概率，但仍然可能存在小概率的动态死锁，即两个节点1和4不断增大投票ID且在2和3进入Commit之前不断抢占2和3，形成竞争，可以引入随机的等待来规避这个小概率事件&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;在此，将上面描述的名词对应到PaxosLease算法的术语上&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;租约 = lease（租约）&lt;/li&gt;
+&lt;li&gt;投票 = propose (提案)&lt;/li&gt;
+&lt;li&gt;发出request的节点 = proposer&lt;/li&gt;
+&lt;li&gt;接受request，发出response的节点 = accepter&lt;/li&gt;
+&lt;li&gt;CommitRequest = ProposeRequest&lt;/li&gt;
+&lt;li&gt;CommitResponse = ProposeReponse&lt;/li&gt;
+&lt;li&gt;投票ID = ProposeID&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;之后将使用术语&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;以上，是出于个人理解，来理解PaxosLease的几个重要元素：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;lease&lt;/li&gt;
+&lt;li&gt;propose&lt;/li&gt;
+&lt;li&gt;ProposeId&lt;/li&gt;
+&lt;li&gt;两阶段的超时设置&lt;/li&gt;
+&lt;li&gt;多数派形成决议&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;一些实现上的问题会在下一篇blog讨论&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;再次讨论&lt;em&gt;不变式&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;在某一时刻，集群中最多存在一个Proposer，知道自己获得了租约。&lt;/p&gt;
+
+&lt;p&gt;此时，多数Accepter知道在*某一个时刻*前某个提案（AcceptedProposeId）是生效的。其他Proposer了解到多数Accepter都有AcceptedProposeId，则其不能获得租约。&lt;/p&gt;
+
+&lt;p&gt;这里说明一下上句中的*某一时刻*。借用参考[1]中的图&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;../../blog-img/2013-12-19-paxos-lease-2.png&#34; alt=&#34;img&#34; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;可以看到Proposer和Accepter间有时间差，即&lt;em&gt;某一个时刻*指的是当前Accepter定时器超时的时刻（可能晚于Proposer上租约到期的时刻），但这并没有影响*不变式*成立。即在满足当前不变式时，&lt;/em&gt;&lt;em&gt;不要求各个节点时钟同步&lt;/em&gt;*&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;以上是我个人的理解，如有不妥，烦请看官comment&lt;/p&gt;
+
+&lt;p&gt;建议此时参看文末的参考文献和Keyspace源码。之后请期待下一篇：实现PaxosLease中的一些问题和解决&lt;/p&gt;
+
+&lt;p&gt;顺便吐个槽，我没有数学天赋和算法天赋，也实在没兴趣下苦工，实在不够进取。罪过罪过。&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;参考文献&lt;/h2&gt;
+
+&lt;p&gt;[1]&lt;a href=&#34;http://dsdoc.net/paxoslease/index.html&#34;&gt;【译】PaxosLease：实现租约的无盘Paxos算法&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;[2] &lt;a href=&#34;https://github.com/scalien/keyspace/tree/master/src/Framework/PaxosLease&#34;&gt;Keyspace源码&lt;/a&gt;&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>对于PaxosLease的个人理解 2</title>
+      <link>http://ikarishinjieva.github.io/post/2013-12-21-paxos-lease-2</link>
+      <pubDate>Thu, 19 Dec 2013 20:19:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-12-21-paxos-lease-2</guid>
+      <description>
+
+&lt;p&gt;在阅读之前，请确定已浏览过&lt;a href=&#34;http://ikarishinjieva.github.io/blog/blog/2013/12/19/paxos-lease/&#34;&gt;第一篇&lt;/a&gt;，并阅读过以下参考文献[1]（最好是阅读过参考文献[2]）&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;参考文献&lt;/h2&gt;
+
+&lt;p&gt;[1]&lt;a href=&#34;http://dsdoc.net/paxoslease/index.html&#34;&gt;【译】PaxosLease：实现租约的无盘Paxos算法&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;[2] &lt;a href=&#34;https://github.com/scalien/keyspace/tree/master/src/Framework/PaxosLease&#34;&gt;Keyspace源码&lt;/a&gt;&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;本篇将讨论以下一些实现PaxosLease中的问题和解决：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;2PC 两阶段的超时设置&lt;/li&gt;
+&lt;li&gt;续租困境及解决&lt;/li&gt;
+&lt;li&gt;Proposer对HighestPromisedProposeId的学习&lt;/li&gt;
+&lt;li&gt;放弃租约&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;假设读者已经从参考文献[1]中熟悉了PaxosLease算法，在所有讨论之前，我们还是先简述一下整个PaxosLease算法，目的来统一一些术语。其中有一些空白，类似于&lt;strong&gt;{1}&lt;/strong&gt;，后面的讨论中会将这些空白逐一填满：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;1&lt;/strong&gt; Proposer A 想要获得租约，生成一个新的ProposeId，组装成一个Prepare Request，并广播给所有Accepter&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;2&lt;/strong&gt; Accepter B收到来自Proposer A的PrepareRequest，检查PrepareRequest中的ProposeId&lt;br/&gt;
+若低于Accepter B的HighestPromisedProposeId，则忽略这一PrepareRequest，&lt;strong&gt;{5}&lt;/strong&gt;&lt;br/&gt;
+否则
+&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;将HighestPromisedProposeId置为PrepareRequest中的ProposeId
+&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp; &lt;strong&gt;{1}&lt;/strong&gt;
+&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;且向Proposer A反馈Prepare Response，Response中带有Accepter B的AcceptedProposeId（可能为空）&lt;br/&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;3&lt;/strong&gt; Proposer A收到Accepter B的Prepare Response。&lt;br/&gt;若多数派Accepter返回的PrepareRequest中的AcceptedProposeId都为空，&lt;strong&gt;{2}&lt;/strong&gt;，则表示多数派Accepter都可以接受Proposer A的Propose，进入Propose 阶段：
+&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;Proposer A启动租约定时器β。定时器β超时时，重新启动Prepare阶段
+&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;Proposer A向多数派广播ProposeRequest&lt;br/&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;4&lt;/strong&gt; &lt;strong&gt;{6}&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;5&lt;/strong&gt; Accepter B收到来自Proposer A的ProposeRequest，（再次）检查ProposeRequest中的ProposeId
+&lt;br/&gt;若低于Accepter B的HighestPromisedProposeId，则忽略这一ProposeRequest
+&lt;br/&gt;否则：&lt;br/&gt;将HighestPromisedProposeId置为ProposeRequest中的ProposeId
+&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;且将AcceptedProposeId置为ProposeRequest中的ProposeId
+&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;且启动定时器γ。定时器γ超时时，将AcceptedProposeId置为0
+&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;且向Proposer A反馈ProposeResponse&lt;br/&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;6&lt;/strong&gt; Proposer A收到Accepter B的ProposeResponse。若Proposer A已收到多数派的ProposeReponse，则Proposer A:
+&lt;br/&gt;可以认为自己持有租约，租约到期的时间为定时器β的超时时间，租约到期时需要清理
+&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&lt;strong&gt;{4}&lt;/strong&gt;
+&lt;br/&gt;&lt;strong&gt;{3}&lt;/strong&gt;&lt;br/&gt;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;这一部分讨论2PC两阶段的超时设置&lt;/h2&gt;
+
+&lt;p&gt;PaxosLease的过程引自参考[1]中，可以看到Prepare阶段没有计时器，而在Propose阶段，Proposer和Accepter分别启动定时器β和定时器γ，来表示“Propose阶段在当前节点超时，需要重新启动投票”，或者“租约在当前节点过期，当前节点可以参与新一轮投票”&lt;/p&gt;
+
+&lt;p&gt;可以看到这个结论与&lt;a href=&#34;http://ikarishinjieva.github.io/blog/blog/2013/12/19/paxos-lease/&#34;&gt;上一篇&lt;/a&gt;的描述不符，下面来解释原因&lt;/p&gt;
+
+&lt;p&gt;在这种设计下，若Prepare阶段有请求丢失，导致Proposer没法获得多数派的反馈，则Prepare阶段会僵死在那里&lt;/p&gt;
+
+&lt;p&gt;参考[1]中使用这种设计的原因是参考[1]中仅讨论了一次投票的情景，并不包括如何长期维护投票秩序。作为一个介绍性的文章，这种情景限定有助于读者理解&lt;/p&gt;
+
+&lt;p&gt;而实际应用中，我们必须要解决Prepare阶段的僵死情况，即在Prepare阶段也加入定时器（Keyspace中也是这样做的）：&lt;br/&gt;
+&lt;strong&gt;{1}&lt;/strong&gt; = &amp;ldquo;并启动定时器α，时长小于租约时长。α超时时，重新启动Prepare阶段。在节点进入Propose阶段时，取消α计时&amp;rdquo;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;续租困境及解决&lt;/h2&gt;
+
+&lt;p&gt;在实际应用中，希望长时间维持一个节点master的身份，而不希望master在集群里换来换去，那么当前持有租约的节点就希望能成功续租&lt;/p&gt;
+
+&lt;p&gt;先介绍续租的实现，参考[1]中提到“如果多数派响应了空的提案或是 &lt;em&gt;已存在提案&lt;/em&gt; （即这个提案中的该请求者的租约还没有过期），它可以再次提议自己为租约的持有者”，相应的我们在过程中做出修改：&lt;br/&gt;
+&lt;strong&gt;{2}&lt;/strong&gt; = &amp;ldquo;或PrepareRequest中的AcceptedProposeId=Proposer A的leaseProposeId&amp;rdquo;&lt;br/&gt;
+&lt;strong&gt;{3}&lt;/strong&gt; = &amp;ldquo;置leaseProposeId为当前的proposeId&amp;rdquo;&lt;br/&gt;
+&lt;strong&gt;{4}&lt;/strong&gt; = &amp;ldquo;置leaseProposeId为0&amp;rdquo;&lt;br/&gt;&lt;/p&gt;
+
+&lt;p&gt;续租实现后，测试过程中，就会发现以下续租困境：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Proposer A获得租约，proposeId=1（此处我们为了方便，简化ProposeId的结构为提交次数），等待一段时间t后开始续租&lt;/li&gt;
+&lt;li&gt;Proposer B在t的过程中，不断尝试想获取续约，但始终得不到多数派的批准，这个过程中Proposer B发出提案的proposeId会飙升，比如说proposeId=10&lt;/li&gt;
+&lt;li&gt;Accepter们在Proposer B的不断尝试中，Prepare阶段HighestPromisedProposeId也跟着飙升，比如说HighestPromisedProposeId=10&lt;/li&gt;
+&lt;li&gt;Proposer A开始续租，proposeId=2，续租失败&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;解决续租困境有几种方式：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Accepter在定时器γ超时前，不接受新的PrepareRequest&lt;/li&gt;
+&lt;li&gt;Proposer续租时，将Request的ProposeId增加较大的值&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;我们随机选择第二种方式，那么在时间t（t&amp;lt;租约时长）的过程中，Proposer B能发出的Prepare Request数量，即B的ProposeId增长量Δ一定满足：Δ &amp;lt; ceil(租约时长/定时器α时长)。即，续租时，Proposer A的proposeId += ceil(租约时长/定时器α时长)即可。&lt;/p&gt;
+
+&lt;p&gt;额外一提，Keyspace中续租的时间（在获得租约后1s就开始续租）远小于Prepare/Propose阶段的超时时间，不会触发这个困境&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;Proposer对HighestPromisedProposeId的学习&lt;/h2&gt;
+
+&lt;p&gt;解决了续租困境后，我们再设定一种困境：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Proposer A 持有租约，并一直续租，导致ProposeId变得很大，比如ProposeId = 10000&lt;/li&gt;
+&lt;li&gt;Accepter们的HighestPromisedProposeId也变得很大，比如HighestPromisedProposeId = 10000&lt;/li&gt;
+&lt;li&gt;此时Proposer A离线&lt;/li&gt;
+&lt;li&gt;Proposer B 闪亮登场（比如在集群中补充了一台server），欲接手，发出PrepareRequest，ProposeId = 0&lt;/li&gt;
+&lt;li&gt;Proposer B 想要持有租约，至少要经过近10000次重试，才能将ProposeId增大到Accepter可接受的大小&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;这个困境的关键是在Proposer知晓的ProposeId太过落后于集群内最新的ProposeId，导致Proposer无法短时间内获得租约，而是需要长时间的重试&lt;/p&gt;
+
+&lt;p&gt;有两种解决方案可供参考：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Keyspace用的是这种方法：认为一个节点由Proposer和Accepter构成，即同一个节点Proposer和Accepter可以共享HighestPromisedProposeId。&lt;br/&gt;这样在上述情况下，只要集群里有任何一个Request被发给Accepter B，那么Proposer B 也可以学习到集群最新的ProposeId&lt;/li&gt;
+&lt;li&gt;另一种方案是加入PrepareReject消息，在消息中Accpeter加入HighestPromisedProposeId供Promised学习，即&lt;br/&gt;
+&lt;strong&gt;{5}&lt;/strong&gt; = 向Proposer A反馈Prepare Reject，其中带有HighestPromisedProposeId&lt;br/&gt;
+&lt;strong&gt;{6}&lt;/strong&gt; = 若Proposer A收到Accepter B的Prepare Reject，则学习其中的HighestPromisedProposeId&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;第二种方案还需考虑网络延迟的情况，即Prepare Reject被长期延迟的情况。不过这种延迟并不会带来影响，因为&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Proposer较晚学习到HighestPromisedProposeId，不会发生错误，只会延迟产生正确的投票结果&lt;/li&gt;
+&lt;li&gt;Prepare Reject的处理过程中，Proposer也会判断此消息是否是当前Request产生的Response。若Prepare Reject延迟较长，Proposer会发起新一轮的Prepare Request，收到旧的Prepare Reject则会抛弃此消息。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;toc_4&#34;&gt;放弃租约&lt;/h2&gt;
+
+&lt;p&gt;实际应用中，会碰到这种情况：持有租约的服务器同时肩负着其他资源的“敏感角色”，比如数据库集群中的主服务器。此时若此server挂掉，则需要等待租约过期，重新投票产生新的租约持有者，然后再由新的租约持有者裁决出新的数据库主服务器，并进行数据保护迁移。这个过程由于集群租约持有者和数据库主服务器这两种角色同时消失，会带来较大的影响。&lt;/p&gt;
+
+&lt;p&gt;为解决以上情况，就希望若两种角色重叠在一台server上，此时server能在&lt;strong&gt;运行稳定时&lt;/strong&gt;放弃租约，做法有两种：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;如参考[1]中提到：“请求者可以发送一个特定释放消息给接受者，消息中包含了它要释放租给的投票编号。在发送释放消息之前，请求者把内部状态从“我持有租约”切换到“我没有持有租约”。”。&lt;br/&gt;&lt;br/&gt;
+考虑“释放消息”被长期延迟的情况，最坏的情况是没有Accepter及时收到消息，跟正常租约超时一样，需要等到多数派Accepter的定时器γ都超时，才能选出新的master。看来不会对正确性带来较大影响，只是不能及时释放租约。&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;懒惰一点，就等到租约超时。为了不让当前Proposer再成为租约持有者，将当前Proposer“冻结” 2倍租约时长，这样既可以等到当前租约超时，又可以避免参与到下一轮投票。&lt;br/&gt;&lt;br/&gt;
+所谓“冻结”，即停掉一切定时器，且不发出新的request&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;至此，此篇已经描述了在实现PaxosLease中碰到的一切问题和取舍，欢迎各位反馈。&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

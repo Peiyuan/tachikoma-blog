@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Html5 on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/html5/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Tue, 19 Mar 2013 23:35:00 UTC</updated>
+    
+    <item>
+      <title>读了“There is no simple solution for local storage”</title>
+      <link>http://ikarishinjieva.github.io/post/2013-03-19-some-readings-about-localStorage</link>
+      <pubDate>Tue, 19 Mar 2013 23:35:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-03-19-some-readings-about-localStorage</guid>
+      <description>&lt;p&gt;作为一个非专职Client开发,偶然读了读关于localStorage的&lt;a href=&#34;http://www.36ria.com/6075&#34;&gt;这篇有趣的文字&lt;/a&gt;,非常有意思,引文也很值得一读。&lt;/p&gt;
+
+&lt;p&gt;作者的思考方向很全面。摘取其中重要的部分：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;(性能) localStorage是会阻止渲染(同步),会写I/O&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;(浏览器行为) localStorage会被浏览器预载入,会被永久存储,浏览器支持良好&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;(开发接口) 接口简单。缺少getSize这样的接口&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;(用户接口) 用户授权简单&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;解决localStorage问题的方案,可能是升级或者寻找替代品,衡量的方向也是上面几点。&lt;/p&gt;
+
+&lt;p&gt;值得一读的引文：&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;p&gt;&lt;a href=&#34;http://htmlui.com/blog/2011-08-23-5-obscure-facts-about-html5-localstorage.html&#34;&gt;这篇引文&lt;/a&gt; 描述了LocalStorage的几个限制。值得注意的是http和https的localStorage不能互通。&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;&lt;a href=&#34;https://hacks.mozilla.org/2012/02/saving-images-and-files-in-localstorage/&#34;&gt;Saving images and files in localStorage&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

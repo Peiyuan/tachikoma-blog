@@ -1,0 +1,1107 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Temporary-Table on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/temporary-table/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Thu, 12 Jun 2014 22:32:00 UTC</updated>
+    
+    <item>
+      <title>测试Mysql临时表的复制</title>
+      <link>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-replication</link>
+      <pubDate>Thu, 12 Jun 2014 22:32:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-replication</guid>
+      <description>
+
+&lt;p&gt;测试一下Mysql 5.6.17对临时表的复制&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;参考资料&lt;/h2&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Percona这篇08年的blog &lt;a href=&#34;http://www.mysqlperformanceblog.com/2008/05/26/mysql-temporary-tables-safe-for-statement-based-replication/&#34;&gt;Can MySQL temporary tables be made safe for statement-based replication?&lt;/a&gt;, 是对于Mysql 5.1这方面的测试. 但根据对Mysql 5.6的相关测试, 其结论已经不适用. 其方法可供参考&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Mysql Manual 对于临时表复制的&lt;a href=&#34;http://dev.mysql.com/doc/refman/5.6/en/replication-features-temptables.html&#34;&gt;讨论&lt;/a&gt;, 其中一些重要的描述列在下面:&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Safe slave shutdown when using temporary tables&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;By default, all temporary tables are replicated; this happens whether or not there are any matching &lt;code&gt;--replicate-do-db&lt;/code&gt;, &lt;code&gt;--replicate-do-table&lt;/code&gt;, or &lt;code&gt;--replicate-wild-do-table&lt;/code&gt; options in effect&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;the &lt;code&gt;--replicate-ignore-table&lt;/code&gt; and &lt;code&gt;--replicate-wild-ignore-table&lt;/code&gt; options are honored for temporary tables&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;概述&lt;/h2&gt;
+
+&lt;p&gt;总共做了两个测试:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Mysql Manual中&amp;rdquo;Safe slave shutdown when using temporary tables&amp;rdquo;一节, 验证为何需要如此安全关闭slave&lt;/li&gt;
+&lt;li&gt;验证在复制临时表时, master意外crash, 是否会造成slave上的资源泄露&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;每个测试后都有结论&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;测试一&lt;/h2&gt;
+
+&lt;p&gt;针对Mysql Manual提到的&amp;rdquo;Safe slave shutdown when using temporary tables&amp;rdquo;, 重现一下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#准备环境, 断开复制
+mysql-master&amp;gt; select @@binlog_format;
++-----------------+
+| @@binlog_format |
++-----------------+
+| MIXED           |
++-----------------+
+1 row in set (0.02 sec)
+
+mysql-slave&amp;gt; stop slave;
+Query OK, 0 rows affected (0.03 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#在master上构造使用临时表的两个transaction
+mysql-master&amp;gt; flush logs;
+Query OK, 0 rows affected (0.02 sec)
+
+mysql-master&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-master&amp;gt; create temporary table test.t(t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql-master&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-master&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-master&amp;gt; insert into test.a select t from test.t;
+Query OK, 0 rows affected (0.00 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql-master&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#查看master的binlog
+mysql-master&amp;gt; show binlog events in &amp;quot;mysql-bin.000036&amp;quot; \G
+*************************** 1. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 4
+ Event_type: Format_desc
+  Server_id: 1
+End_log_pos: 120
+       Info: Server ver: 5.6.17-debug-log, Binlog ver: 4
+*************************** 2. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 120
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 195
+       Info: BEGIN
+*************************** 3. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 195
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 301
+       Info: create temporary table test.t(t int)
+*************************** 4. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 301
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 370
+       Info: COMMIT
+*************************** 5. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 370
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 445
+       Info: BEGIN
+*************************** 6. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 445
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 554
+       Info: insert into test.a select t from test.t
+*************************** 7. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 554
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 623
+       Info: COMMIT
+7 rows in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#开启复制,让复制在两个transaction之间中断
+
+mysql-slave&amp;gt; start slave until master_log_file=&#39;mysql-bin.000036&#39;, master_log_pos=370;
+Query OK, 0 rows affected, 1 warning (0.02 sec)
+
+mysql-slave&amp;gt; show slave status\G
+*************************** 1. row ***************************
+               Slave_IO_State: Waiting for master to send event
+...
+              Master_Log_File: mysql-bin.000036
+          Read_Master_Log_Pos: 623
+...
+        Relay_Master_Log_File: mysql-bin.000036
+             Slave_IO_Running: Yes
+            Slave_SQL_Running: No
+...
+          Exec_Master_Log_Pos: 370
+...
+1 row in set (0.00 sec)
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#查看slave正在使用的临时表, 并重启slave
+
+mysql-slave&amp;gt; show status like &#39;%temp%&#39;;                      
++------------------------+-------+
+| Variable_name          | Value |
++------------------------+-------+
+| Slave_open_temp_tables | 1     |
++------------------------+-------+
+1 row in set (0.01 sec)
+
+slave&amp;gt; service mysqld restart
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#验证slave status
+
+
+mysql-slave&amp;gt; show slave status\G
+*************************** 1. row ***************************
+...
+              Master_Log_File: mysql-bin.000036
+          Read_Master_Log_Pos: 623
+...
+        Relay_Master_Log_File: mysql-bin.000036
+             Slave_IO_Running: Yes
+            Slave_SQL_Running: No
+...
+                   Last_Errno: 1146
+                   Last_Error: Error &#39;Table &#39;test.t&#39; doesn&#39;t exist&#39; on query. Default database: &#39;&#39;. Query: &#39;insert into test.a select t from test.t&#39;
+...
+          Exec_Master_Log_Pos: 370
+...
+               Last_SQL_Errno: 1146
+               Last_SQL_Error: Error &#39;Table &#39;test.t&#39; doesn&#39;t exist&#39; on query. Default database: &#39;&#39;. Query: &#39;insert into test.a select t from test.t&#39;
+  Replicate_Ignore_Server_Ids:
+...
+1 row in set (0.00 sec)
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;结论&lt;/strong&gt;: 使用临时表时, slave并不保证crash-safe, 而且若在连续的transaction中复用同一个临时表, 完全没办法安全修复.&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;测试2&lt;/h2&gt;
+
+&lt;p&gt;对于一个&lt;code&gt;create temporary table&lt;/code&gt;, 已知&lt;code&gt;drop temporary table&lt;/code&gt;会在session结束时写进binlog. 那么如果master意外退出, 是不是会对slave造成资源泄露? 比如不释放文件句柄&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#准备master环境
+mysql-master&amp;gt; select @@binlog_format;
++-----------------+
+| @@binlog_format |
++-----------------+
+| MIXED           |
++-----------------+
+1 row in set (0.00 sec)
+
+mysql-master&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#检查slave上的资源
+mysql-slave&amp;gt; show status like &#39;%open%&#39;;
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 6     |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 164   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 0     |
+...
++----------------------------+-------+
+14 rows in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#在master上创建5张临时表
+mysql-master&amp;gt; create temporary table test.t1 (t int);create temporary table test.t2 (t int);create temporary table test.t3 (t int);create temporary table test.t4 (t int);create temporary table test.t5 (t int);
+Query OK, 0 rows affected (0.02 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#检查slave上的资源
+mysql-slave&amp;gt; show status like &#39;%open%&#39;;
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 11    |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 179   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 5     |
+...
++----------------------------+-------+
+14 rows in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#引发master故障, 重启master库
+master&amp;gt; pkill -9 mysqld
+master&amp;gt; /opt/mysql/bin/mysqld_safe &amp;amp;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#重启slave复制, 检查slave上的资源
+
+mysql-slave&amp;gt; stop slave io_thread;
+Query OK, 0 rows affected (0.02 sec)
+
+mysql-slave&amp;gt; start slave io_thread;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-slave&amp;gt; show status like &#39;%open%&#39;;
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 6     |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 209   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 5     |
+...
++----------------------------+-------+
+14 rows in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#在master上再次创建5张临时表, 检查slave上的资源
+mysql-master&amp;gt; create temporary table test.t1 (t int);create temporary table test.t2 (t int);create temporary table test.t3 (t int);create temporary table test.t4 (t int);create temporary table test.t5 (t int);
+Query OK, 0 rows affected (0.09 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.02 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+
+mysql-slave&amp;gt; show status like &#39;%open%&#39;;
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 11    |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 224   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 10    |
+...
++----------------------------+-------+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;结论&lt;/strong&gt;: 复制临时表时,slave上消耗的资源, &lt;code&gt;Innodb_num_open_files&lt;/code&gt;会及时回收,也就是说实际消耗的系统资源被及时回收. 但&lt;code&gt;Slave_open_temp_tables&lt;/code&gt;会虚高不下,按照Mysql Manual中&amp;rdquo;Safe slave shutdown when using temporary tables&amp;rdquo;的叙述, 用&lt;code&gt;Slave_open_temp_tables&lt;/code&gt;来判断关闭server的时机时, 会出现判断失误.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>测试Mysql临时表的binlog</title>
+      <link>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-binlog</link>
+      <pubDate>Thu, 12 Jun 2014 22:30:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-binlog</guid>
+      <description>
+
+&lt;p&gt;在Mysql 5.6.17上测试临时表生成的binlog&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;测试用例&lt;/h2&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;td&gt;用例&lt;/td&gt;
+&lt;td&gt;row&lt;/td&gt;
+&lt;td&gt;statement&lt;/td&gt;
+&lt;td&gt;mixed&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;create temporary table&lt;/code&gt; 产生的binlog&lt;/td&gt;
+&lt;td&gt;1.1&lt;/td&gt;
+&lt;td&gt;1.2&lt;/td&gt;
+&lt;td&gt;1.3&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;create temporary table&lt;/code&gt; 产生的binlog (&lt;code&gt;mysqlbinlog&lt;/code&gt;)&lt;/td&gt;
+&lt;td&gt;2.1&lt;/td&gt;
+&lt;td&gt;2.2&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;临时表对非临时表数据产生影响时, 产生的binlog&lt;/td&gt;
+&lt;td&gt;3.1&lt;/td&gt;
+&lt;td&gt;3.2&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;临时表对非临时表数据产生影响, 并rollback时, 产生的binlog&lt;/td&gt;
+&lt;td&gt;4.1&lt;/td&gt;
+&lt;td&gt;4.2&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;多session同时创建临时表, 产生的binlog&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;5.1&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;开启&lt;code&gt;enforce-gtid-consistency&lt;/code&gt;时, &lt;code&gt;create temporary table&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;6.1&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;测试结论&lt;/h2&gt;
+
+&lt;p&gt;.1. &lt;code&gt;create temporary table&lt;/code&gt; 产生的binlog&lt;/p&gt;
+
+&lt;p&gt;结论: 可以看到&lt;code&gt;statement&lt;/code&gt;和&lt;code&gt;mixed&lt;/code&gt;模式生成的binlog一样. 而&lt;code&gt;row&lt;/code&gt;模式中, 因为临时表并没有产生实际影响, 所以没有产生额外的binlog event&lt;/p&gt;
+
+&lt;p&gt;.2. &lt;code&gt;create temporary table&lt;/code&gt; 产生的binlog (&lt;code&gt;mysqlbinlog&lt;/code&gt;)&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;show binlog events&lt;/code&gt; 的输出只是摘要了binlog的内容, &lt;code&gt;mysqlbinlog&lt;/code&gt;的输出才能精准的显示binlog的内容&lt;/p&gt;
+
+&lt;p&gt;重做&lt;code&gt;row&lt;/code&gt;模式和&lt;code&gt;statement&lt;/code&gt;模式的测试, 可以看到&lt;code&gt;row&lt;/code&gt;模式虽然不产生&lt;code&gt;create temporary table&lt;/code&gt;, 但是会产生一个&lt;code&gt;drop temporary table if exists&lt;/code&gt;; &lt;code&gt;statement&lt;/code&gt;模式产生&lt;code&gt;create temporary table&lt;/code&gt;, 但不产生&lt;code&gt;drop temporary table&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;.3. 临时表对非临时表数据产生影响时, 产生的binlog&lt;/p&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;row&lt;/code&gt;模式会产生非临时表的行日志.&lt;code&gt;statement&lt;/code&gt;模式会严格记录语句.&lt;/p&gt;
+
+&lt;p&gt;.4. 临时表对非临时表数据产生影响,并rollback时, 产生的binlog&lt;/p&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;row&lt;/code&gt;模式下, rollback不会对binlog产生影响. 在&lt;code&gt;statement&lt;/code&gt;模式下, 所有的语句都会如实反映在binlog里, 并进行rollback&lt;/p&gt;
+
+&lt;p&gt;.5. 多session同时创建临时表, 产生的binlog&lt;/p&gt;
+
+&lt;p&gt;不同于典型DDL, &lt;code&gt;create temporary table&lt;/code&gt;记在transaction中.&lt;/p&gt;
+
+&lt;p&gt;由session结束产生的&lt;code&gt;drop temporary table&lt;/code&gt;则类似于典型的DDL.&lt;/p&gt;
+
+&lt;p&gt;.6. 开启&lt;code&gt;enforce-gtid-consistency&lt;/code&gt;时, &lt;code&gt;create temporary table&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;开启&lt;code&gt;enforce-gtid-consistency&lt;/code&gt;时, 在transaction内创建临时表会得到warning:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;ERROR 1787 (HY000): When @@GLOBAL.ENFORCE_GTID_CONSISTENCY = 1, the statements CREATE TEMPORARY TABLE and DROP TEMPORARY TABLE can be executed in a non-transactional context only, and require that AUTOCOMMIT = 1.
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;hr /&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;元日志&lt;/h2&gt;
+
+&lt;p&gt;.1.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;row&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; show binlog events in &#39;mysql-bin.000014&#39; \G
+*************************** 1. row ***************************
+   Log_name: mysql-bin.000014
+        Pos: 4
+ Event_type: Format_desc
+  Server_id: 1
+End_log_pos: 120
+       Info: Server ver: 5.6.17-debug-log, Binlog ver: 4
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.1.2&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
+
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;statement&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; show binlog events in &#39;mysql-bin.000015&#39; \G
+*************************** 1. row ***************************
+   Log_name: mysql-bin.000015
+        Pos: 4
+ Event_type: Format_desc
+  Server_id: 1
+End_log_pos: 120
+       Info: Server ver: 5.6.17-debug-log, Binlog ver: 4
+*************************** 2. row ***************************
+   Log_name: mysql-bin.000015
+        Pos: 120
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 195
+       Info: BEGIN
+*************************** 3. row ***************************
+   Log_name: mysql-bin.000015
+        Pos: 195
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 302
+       Info: create temporary table test.t (t int)
+*************************** 4. row ***************************
+   Log_name: mysql-bin.000015
+        Pos: 302
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 371
+       Info: COMMIT
+4 rows in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.1.3&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.01 sec)
+
+mysql&amp;gt; select @@binlog_format;
++-----------------+
+| @@binlog_format |
++-----------------+
+| MIXED           |
++-----------------+
+1 row in set (0.01 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.02 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.05 sec)
+
+mysql&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; show binlog events in &#39;mysql-bin.000011&#39;\G
+*************************** 1. row ***************************
+   Log_name: mysql-bin.000011
+        Pos: 4
+ Event_type: Format_desc
+  Server_id: 1
+End_log_pos: 120
+       Info: Server ver: 5.6.17-debug-log, Binlog ver: 4
+*************************** 2. row ***************************
+   Log_name: mysql-bin.000011
+        Pos: 120
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 195
+       Info: BEGIN
+*************************** 3. row ***************************
+   Log_name: mysql-bin.000011
+        Pos: 195
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 302
+       Info: create temporary table test.t (t int)
+*************************** 4. row ***************************
+   Log_name: mysql-bin.000011
+        Pos: 302
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 371
+       Info: COMMIT
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.2.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000014
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  4:38:58 server id 1  end_log_pos 120 CRC32 0xb935033a  Start: binlog v 4, server v 5.6.17-debug-log created 140612  4:38:58
+# at 120
+#140612  4:42:30 server id 1  end_log_pos 257 CRC32 0x8f9ccf27  Query   thread_id=2 exec_time=0 error_code=0
+SET TIMESTAMP=1402548150/*!*/;
+SET @@session.pseudo_thread_id=2/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+DROP TEMPORARY TABLE IF EXISTS `test`.`t` /* generated by server */
+/*!*/;
+# at 257
+#140612  4:42:51 server id 1  end_log_pos 304 CRC32 0x62766a77  Rotate to mysql-bin.000015  pos: 4
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.2.2&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000015
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  4:42:51 server id 1  end_log_pos 120 CRC32 0xc3707cb7  Start: binlog v 4, server v 5.6.17-debug-log created 140612  4:42:51
+# Warning: this binlog is either in use or was not closed properly.
+# at 120
+#140612  4:42:58 server id 1  end_log_pos 195 CRC32 0x2fd0ed95  Query   thread_id=2 exec_time=0 error_code=0
+SET TIMESTAMP=1402548178/*!*/;
+SET @@session.pseudo_thread_id=2/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+BEGIN
+/*!*/;
+# at 195
+#140612  4:42:58 server id 1  end_log_pos 302 CRC32 0xfc742b50  Query   thread_id=2 exec_time=0 error_code=0
+SET TIMESTAMP=1402548178/*!*/;
+create temporary table test.t (t int)
+/*!*/;
+# at 302
+#140612  4:43:00 server id 1  end_log_pos 371 CRC32 0x25648832  Query   thread_id=2 exec_time=0 error_code=0
+SET TIMESTAMP=1402548180/*!*/;
+COMMIT
+/*!*/;
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.3.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;row&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt;  create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; insert into test.t values(2);
+Query OK, 1 row affected (0.00 sec)
+
+mysql&amp;gt; insert into test.a select t from test.t;
+Query OK, 1 row affected (0.00 sec)
+Records: 1  Duplicates: 0  Warnings: 0
+
+mysql&amp;gt; commit;
+Query OK, 0 rows affected (0.01 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows -v mysql-bin.000020
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  6:02:38 server id 1  end_log_pos 120 CRC32 0x31b6357c  Start: binlog v 4, server v 5.6.17-debug-log created 140612  6:02:38
+# Warning: this binlog is either in use or was not closed properly.
+# at 120
+#140612  6:02:53 server id 1  end_log_pos 188 CRC32 0x23bceabc  Query   thread_id=6 exec_time=0 error_code=0
+SET TIMESTAMP=1402552973/*!*/;
+SET @@session.pseudo_thread_id=6/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+BEGIN
+/*!*/;
+# at 188
+#140612  6:02:53 server id 1  end_log_pos 232 CRC32 0x1a87cc74  Table_map: `test`.`a` mapped to number 70
+# at 232
+#140612  6:02:53 server id 1  end_log_pos 272 CRC32 0xf0c862fb  Write_rows: table id 70 flags: STMT_END_F
+### INSERT INTO `test`.`a`
+### SET
+###   @1=2
+# at 272
+#140612  6:02:55 server id 1  end_log_pos 303 CRC32 0xb2f66e82  Xid = 92
+COMMIT/*!*/;
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.3.2&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;statement&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; insert into test.t values(3);
+Query OK, 1 row affected (0.00 sec)
+
+mysql&amp;gt; insert into test.a select t from test.t;
+Query OK, 1 row affected (0.00 sec)
+Records: 1  Duplicates: 0  Warnings: 0
+
+mysql&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000021
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  6:07:43 server id 1  end_log_pos 120 CRC32 0xbcd985c3  Start: binlog v 4, server v 5.6.17-debug-log created 140612  6:07:43
+# Warning: this binlog is either in use or was not closed properly.
+# at 120
+#140612  6:07:50 server id 1  end_log_pos 195 CRC32 0xf5ea27f6  Query   thread_id=7 exec_time=0 error_code=0
+SET TIMESTAMP=1402553270/*!*/;
+SET @@session.pseudo_thread_id=7/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+BEGIN
+/*!*/;
+# at 195
+#140612  6:07:50 server id 1  end_log_pos 302 CRC32 0xa52fbe74  Query   thread_id=7 exec_time=0 error_code=0
+SET TIMESTAMP=1402553270/*!*/;
+create temporary table test.t (t int)
+/*!*/;
+# at 302
+#140612  6:07:55 server id 1  end_log_pos 400 CRC32 0x037b8754  Query   thread_id=7 exec_time=0 error_code=0
+SET TIMESTAMP=1402553275/*!*/;
+insert into test.t values(3)
+/*!*/;
+# at 400
+#140612  6:07:59 server id 1  end_log_pos 509 CRC32 0xa1dc2124  Query   thread_id=7 exec_time=0 error_code=0
+SET TIMESTAMP=1402553279/*!*/;
+insert into test.a select t from test.t
+/*!*/;
+# at 509
+#140612  6:08:01 server id 1  end_log_pos 540 CRC32 0xf7e3aa59  Xid = 102
+COMMIT/*!*/;
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.4.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;row&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; insert into test.t values(5);
+Query OK, 1 row affected (0.01 sec)
+
+mysql&amp;gt; insert into test.a select t from test.t;
+Query OK, 1 row affected (0.00 sec)
+Records: 1  Duplicates: 0  Warnings: 0
+
+mysql&amp;gt; rollback;
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+mysql&amp;gt; show warnings;
++---------+------+-----------------------------------------------------------------+
+| Level   | Code | Message                                                         |
++---------+------+-----------------------------------------------------------------+
+| Warning | 1751 | The creation of some temporary tables could not be rolled back. |
++---------+------+-----------------------------------------------------------------+
+1 row in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000024
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  6:25:58 server id 1  end_log_pos 120 CRC32 0x8f8f4247  Start: binlog v 4, server v 5.6.17-debug-log created 140612  6:25:58
+# Warning: this binlog is either in use or was not closed properly.
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.4.2&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;statement&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; insert into test.t values(4);
+Query OK, 1 row affected (0.00 sec)
+
+mysql&amp;gt; insert into test.a select t from test.t;
+Query OK, 1 row affected (0.00 sec)
+Records: 1  Duplicates: 0  Warnings: 0
+
+mysql&amp;gt; rollback;
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+mysql&amp;gt; show warnings;
++---------+------+-----------------------------------------------------------------+
+| Level   | Code | Message                                                         |
++---------+------+-----------------------------------------------------------------+
+| Warning | 1751 | The creation of some temporary tables could not be rolled back. |
++---------+------+-----------------------------------------------------------------+
+1 row in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000023
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  6:22:03 server id 1  end_log_pos 120 CRC32 0x8ebd7db6  Start: binlog v 4, server v 5.6.17-debug-log created 140612  6:22:03
+# Warning: this binlog is either in use or was not closed properly.
+# at 120
+#140612  6:22:13 server id 1  end_log_pos 195 CRC32 0x2ef37ea7  Query   thread_id=9 exec_time=0 error_code=0
+SET TIMESTAMP=1402554133/*!*/;
+SET @@session.pseudo_thread_id=9/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+BEGIN
+/*!*/;
+# at 195
+#140612  6:22:13 server id 1  end_log_pos 302 CRC32 0xc642d4a1  Query   thread_id=9 exec_time=0 error_code=0
+SET TIMESTAMP=1402554133/*!*/;
+create temporary table test.t (t int)
+/*!*/;
+# at 302
+#140612  6:22:17 server id 1  end_log_pos 400 CRC32 0x076861c4  Query   thread_id=9 exec_time=0 error_code=0
+SET TIMESTAMP=1402554137/*!*/;
+insert into test.t values(4)
+/*!*/;
+# at 400
+#140612  6:22:21 server id 1  end_log_pos 509 CRC32 0x2e43db50  Query   thread_id=9 exec_time=0 error_code=0
+SET TIMESTAMP=1402554141/*!*/;
+insert into test.a select t from test.t
+/*!*/;
+# at 509
+#140612  6:22:24 server id 1  end_log_pos 580 CRC32 0xdefa8f3d  Query   thread_id=9 exec_time=0 error_code=0
+SET TIMESTAMP=1402554144/*!*/;
+ROLLBACK
+/*!*/;
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.5.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql-session1&amp;gt; set @@session.binlog_format=&amp;quot;statement&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session2&amp;gt; set @@session.binlog_format=&amp;quot;statement&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session1&amp;gt; flush logs;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session1&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session1&amp;gt; create temporary table test.t(t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql-session2&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session2&amp;gt; create temporary table test.t(t int);
+Query OK, 0 rows affected (0.02 sec)
+
+mysql-session1&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session2&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session1&amp;gt; exit;
+Bye
+
+mysql-session2&amp;gt; exit;
+Bye
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;
+[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000028
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  6:45:24 server id 1  end_log_pos 120 CRC32 0x0ad8e5a0  Start: binlog v 4, server v 5.6.17-debug-log created 140612  6:45:24
+# Warning: this binlog is either in use or was not closed properly.
+# at 120
+#140612  6:45:58 server id 1  end_log_pos 195 CRC32 0x59b581d0  Query   thread_id=14    exec_time=0 error_code=0
+SET TIMESTAMP=1402555558/*!*/;
+SET @@session.pseudo_thread_id=14/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+BEGIN
+/*!*/;
+# at 195
+#140612  6:45:58 server id 1  end_log_pos 301 CRC32 0x274004b9  Query   thread_id=14    exec_time=0 error_code=0
+SET TIMESTAMP=1402555558/*!*/;
+create temporary table test.t(t int)
+/*!*/;
+# at 301
+#140612  6:46:54 server id 1  end_log_pos 370 CRC32 0x9f2ca921  Query   thread_id=14    exec_time=0 error_code=0
+SET TIMESTAMP=1402555614/*!*/;
+COMMIT
+/*!*/;
+# at 370
+#140612  6:46:17 server id 1  end_log_pos 445 CRC32 0x3f1094c3  Query   thread_id=16    exec_time=0 error_code=0
+SET TIMESTAMP=1402555577/*!*/;
+SET @@session.pseudo_thread_id=16/*!*/;
+BEGIN
+/*!*/;
+# at 445
+#140612  6:46:17 server id 1  end_log_pos 551 CRC32 0x754cae85  Query   thread_id=16    exec_time=0 error_code=0
+SET TIMESTAMP=1402555577/*!*/;
+create temporary table test.t(t int)
+/*!*/;
+# at 551
+#140612  6:46:58 server id 1  end_log_pos 620 CRC32 0x73eb6f5a  Query   thread_id=16    exec_time=0 error_code=0
+SET TIMESTAMP=1402555618/*!*/;
+COMMIT
+/*!*/;
+# at 620
+#140612  6:47:22 server id 1  end_log_pos 733 CRC32 0xb4c3b1c0  Query   thread_id=14    exec_time=0 error_code=0
+use `test`/*!*/;
+SET TIMESTAMP=1402555642/*!*/;
+SET @@session.pseudo_thread_id=14/*!*/;
+DROP /*!40005 TEMPORARY */ TABLE IF EXISTS `t`
+/*!*/;
+# at 733
+#140612  6:47:38 server id 1  end_log_pos 846 CRC32 0x1287fb24  Query   thread_id=16    exec_time=0 error_code=0
+SET TIMESTAMP=1402555658/*!*/;
+SET @@session.pseudo_thread_id=16/*!*/;
+DROP /*!40005 TEMPORARY */ TABLE IF EXISTS `t`
+/*!*/;
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.6.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@GTID_MODE;
++-------------+
+| @@GTID_MODE |
++-------------+
+| ON          |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; select @@enforce_gtid_consistency;
++----------------------------+
+| @@enforce_gtid_consistency |
++----------------------------+
+|                          1 |
++----------------------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t(t int);
+ERROR 1787 (HY000): When @@GLOBAL.ENFORCE_GTID_CONSISTENCY = 1, the statements CREATE TEMPORARY TABLE and DROP TEMPORARY TABLE can be executed in a non-transactional context only, and require that AUTOCOMMIT = 1.
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

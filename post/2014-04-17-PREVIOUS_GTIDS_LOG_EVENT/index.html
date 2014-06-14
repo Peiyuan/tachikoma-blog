@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> PREVIOUS_GTIDS_LOG_EVENT的格式 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>PREVIOUS_GTIDS_LOG_EVENT的格式</h1>
+  <span class="post-date">Thu, Apr 17, 2014      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/mysql">mysql</a> </li>
+      
+        <li><a href="tags/binlog">binlog</a> </li>
+      
+        <li><a href="tags/gtid">GTID</a> </li>
+      
+    </ul></span>
+      <p>并没找到特别好的对<code>PREVIOUS_GTIDS_LOG_EVENT</code>格式的描述, 自己写一个</p>
+
+<p>据下面这个例子, 是<code>mysqlbinlog</code>的分析结果</p>
+
+<pre><code># at 120
+#140417 15:50:36 server id 904898000  end_log_pos 311 CRC32 0x311ec069
+# Position  Timestamp   Type   Master ID        Size      Master Pos    Flags
+#       78 cc 87 4f 53   23   d0 a5 ef 35   bf 00 00 00   37 01 00 00   00 00
+#       8b 04 00 00 00 00 00 00 00  7e 23 40 1a c6 03 11 e3 |................|
+#       9b 8e 13 5e 10 e6 a0 5c fb  01 00 00 00 00 00 00 00 |................|
+#       ab 01 00 00 00 00 00 00 00  06 00 00 00 00 00 00 00 |................|
+#       bb 81 86 fc 1e c5 ff 11 e3  8d f9 e6 6c cf 50 db 66 |...........l.P.f|
+#       cb 01 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00 |................|
+#       db 0c 00 00 00 00 00 00 00  a6 ce 32 8c c6 02 11 e3 |..........2.....|
+#       eb 8e 0d e6 6c cf 50 db 66  01 00 00 00 00 00 00 00 |...l.P.f........|
+#       fb 01 00 00 00 00 00 00 00  07 00 00 00 00 00 00 00 |................|
+#      10b b7 00 99 20 c6 01 11 e3  8e 07 5e 10 e6 a0 5c fb |................|
+#      11b 01 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00 |................|
+#      12b 07 00 00 00 00 00 00 00  69 c0 1e 31             |........i..1|
+#      Previous-GTIDs
+# 7e23401a-c603-11e3-8e13-5e10e6a05cfb:1-5,
+# 8186fc1e-c5ff-11e3-8df9-e66ccf50db66:1-11,
+# a6ce328c-c602-11e3-8e0d-e66ccf50db66:1-6,
+# b7009920-c601-11e3-8e07-5e10e6a05cfb:1-6
+</code></pre>
+
+<p>从78-8a的位置, 是Binlog Event header, 参看<a href="http://dev.mysql.com/doc/internals/en/binlog-event-header.html">这里</a></p>
+
+<p>最后四个字节, (69 c0 1e 31) 是checksum, 与参数 <a href="http://dev.mysql.com/doc/refman/5.6/en/replication-options-binary-log.html#option_mysqld_binlog-checksum">binlog-checksum</a> 有关</p>
+
+<p>中间的部分, 是gtid的数据区, 格式如下:</p>
+
+<table>
+<thead>
+<tr>
+<td>层次</td>
+<td>字节数</td>
+<td>含义</td>
+<td>例子中的数值</td>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>0</td>
+<td>8</td>
+<td>GTID中sid-number的组数</td>
+<td>例子中为四组</td>
+</tr>
+
+<tr>
+<td>1</td>
+<td>16</td>
+<td>第一组sid-number的sid部分</td>
+<td>例子中为(7e 23 40 1a c6 03 11 e3 9b 8e 13 5e 10 e6 a0 5c fb)</td>
+</tr>
+
+<tr>
+<td>1</td>
+<td>8</td>
+<td>第一组sid-number中, internal numbers的个数</td>
+<td>例子中为1个internal number (<code>1-5</code>)</td>
+</tr>
+
+<tr>
+<td>2</td>
+<td>8</td>
+<td>第一组sid-number中, 第一个internal number的起始number</td>
+<td>例子中为<code>1</code></td>
+</tr>
+
+<tr>
+<td>2</td>
+<td>8</td>
+<td>第一组sid-number中, 第一个internal number的结束number+1</td>
+<td>例子中为<code>5+1=6</code></td>
+</tr>
+
+<tr>
+<td>2</td>
+<td>8</td>
+<td>第一组sid-number中, 第二个internal number的起始number</td>
+<td>&hellip; (例子中没有第二个internal number)</td>
+</tr>
+
+<tr>
+<td>2</td>
+<td>8</td>
+<td>第一组sid-number中, 第二个internal number的结束number+1</td>
+<td>&hellip; (例子中没有第二个internal number)</td>
+</tr>
+
+<tr>
+<td>&hellip;</td>
+<td>&hellip;</td>
+<td>&hellip;</td>
+<td>&hellip;</td>
+</tr>
+
+<tr>
+<td>1</td>
+<td>16</td>
+<td>第二组sid-number的sid部分</td>
+<td>&hellip;</td>
+</tr>
+
+<tr>
+<td>&hellip;</td>
+<td>&hellip;</td>
+<td>&hellip;</td>
+<td>&hellip;</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

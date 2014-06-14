@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> 对mysql table cache的理解 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>对mysql table cache的理解</h1>
+  <span class="post-date">Thu, May 15, 2014      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/mysql">mysql</a> </li>
+      
+        <li><a href="tags/table-cache">table cache</a> </li>
+      
+    </ul></span>
+      
+
+<p>最近读了mysql table_cache部分的一些代码.</p>
+
+<p>首先推荐这篇<a href="http://blog.sina.com.cn/s/blog_4673e60301010r5u.html">导读</a>, 写的比较详尽. 不对其中已有的部分进行重复, 仅记录自己的一些理解.</p>
+
+<h2 id="toc_0">最简单的功能</h2>
+
+<p>叫做table_cache, 就是对<code>table</code>做擦车(cache).</p>
+
+<p>其中<code>table</code>是指的mysql打开的表的描述结构(descriptor)(<a href="http://osxr.org/mysql/source/sql/table.h#0974"><code>TABLE</code></a>),  简单理解就是mysql要操作一张表时, 就会先打开其descriptor, 打开后读取其中信息, 然后进行操作.</p>
+
+<p>为了快速访问, cache 往往类似于 Hash. table_cache 的 key 是
+    db_name + table_name
+table_cache 的 value 是 descriptor 的集合, 即 <a href="http://osxr.org/mysql/source/sql/table_cache.h#0208"><code>Table_cache_element</code></a>.</p>
+
+<p>value 是 descriptor 的集合而不是 descriptor, 是因为对于同一张表, 在cache中同时会打开多个 descriptor</p>
+
+<p>额外一提, table_cache是按线程号分桶的, 参看<code>Table_cache_manager</code></p>
+
+<h2 id="toc_1">进一步, 留下被回收的元素</h2>
+
+<p>传统擦车, 不用的元素就直接回收了. table_cache暂存了不用的元素, 提高命中率.</p>
+
+<p>可以看到<code>Table_cache_element</code>一共两个列表:</p>
+
+<ul>
+<li>used_tables</li>
+<li>free_tables</li>
+</ul>
+
+<h2 id="toc_2">进一步, 抽出共同的部分</h2>
+
+<p>同一张表的多个 descriptor, 会有公共部分, 抽出这些公共部分, 能有效节省资源.</p>
+
+<p>比如<code>mem_root</code> (个人称之为受管内存区), 此内存区管理着跟某表相关的一些数据结构, 且受mysqld的管制. 如果同一张表的每个 descriptor 都独立管理一篇内存, 会引起不必要的浪费.</p>
+
+<p>抽出的公共部分称为<a href="http://osxr.org/mysql/source/sql/table.h#0584"><code>TABLE_SHARE</code></a></p>
+
+<h2 id="toc_3">进一步, 公共部分也得擦车</h2>
+
+<p><code>TABLE_SHARE</code> 也被擦车了, 其被回收的元素跟<code>TABLE</code>一样也被擦车了.</p>
+
+<h2 id="toc_4">擦车的步骤</h2>
+
+<p>简述擦车的步骤</p>
+
+<ol>
+<li>在cache中查找<code>TABLE</code></li>
+<li>如果找到<code>TABLE</code>, 则成功</li>
+<li>在cache中查找<code>TABLE_SHARE</code></li>
+<li>如果找不到<code>TABLE_SHARE</code>, 则生成一个</li>
+<li>根据<code>TABLE_SHARE</code>, 生成一个<code>TABLE</code></li>
+<li>维护好cache</li>
+</ol>
+
+<h2 id="toc_5">如果找不到<code>TABLE_SHARE</code></h2>
+
+<p>参看<a href="http://osxr.org/mysql/ident?_i=get_table_share_with_discover"><code>get_table_share_with_discover</code></a></p>
+
+<p>如果内存中找不到<code>TABLE_SHARE</code>, 则向存储引擎查询, 如果存储引擎可以提供, 则进行<a href="http://osxr.org/mysql/ident?_i=recover_from_failed_open">discover</a></p>
+
+<h2 id="toc_6">关于死锁</h2>
+
+<p>table_cache 里有很多代码是关于死锁的处理, 其一个主要原因是因为 mysql 分为了sql层和存储引擎层, MDL的死锁检测限于sql层, 存储引擎层自带死锁检测, 但一个死锁如果跨过两层, 则需要特殊处理</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

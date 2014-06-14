@@ -1,0 +1,373 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Mdl on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/mdl/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Sat, 05 Apr 2014 11:43:00 UTC</updated>
+    
+    <item>
+      <title>MDL_map_partition中对锁的过渡</title>
+      <link>http://ikarishinjieva.github.io/post/2014-04-05-MDL_map_partition-lock-split</link>
+      <pubDate>Sat, 05 Apr 2014 11:43:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-04-05-MDL_map_partition-lock-split</guid>
+      <description>
+
+&lt;p&gt;在&lt;code&gt;MDL&lt;/code&gt;源码中有一段&lt;code&gt;MDL_map_partition&lt;/code&gt;中对锁的过渡有点意思, 拿出来分析一下&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;场景&lt;/h2&gt;
+
+&lt;p&gt;&lt;code&gt;MDL_map_partition&lt;/code&gt;是容纳&lt;code&gt;MDL_lock&lt;/code&gt;的一个容器, &lt;code&gt;MDL_lock&lt;/code&gt;可以简单的理解为一种锁.&lt;/p&gt;
+
+&lt;p&gt;那么场景问题是现在我要从锁容器&lt;code&gt;C&lt;/code&gt;中查找一个锁&lt;code&gt;L&lt;/code&gt;并加锁&lt;code&gt;L&lt;/code&gt;, 怎样做到多线程安全&lt;/p&gt;
+
+&lt;p&gt;场景中&lt;code&gt;C&lt;/code&gt;上有保护&lt;code&gt;C&lt;/code&gt;的锁&lt;code&gt;A&lt;/code&gt; (容器锁), &lt;code&gt;L&lt;/code&gt;上的锁为&lt;code&gt;B&lt;/code&gt; (成员锁) (此处做了简化, 实际上&lt;code&gt;MDL_lock&lt;/code&gt;并不是一个锁, 而是类似于条件变量, 而锁&lt;code&gt;B&lt;/code&gt;是保护&lt;code&gt;L&lt;/code&gt;的锁. 此处将&lt;code&gt;L&lt;/code&gt;简化为一把锁)&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;分析1&lt;/h2&gt;
+
+&lt;p&gt;最简单的方法, 就是&lt;code&gt;A&lt;/code&gt;加锁, &lt;code&gt;B&lt;/code&gt;加锁, &lt;code&gt;A&lt;/code&gt;解锁. 这种方法肯定不会有错, 但是并发性上会出现问题. 比如以下场景&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;线程T1持有&lt;code&gt;B&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;线程T2正在容器中查找&lt;code&gt;B&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;线程T3在同一个容器中查找另外一个&lt;code&gt;MDL_lock&lt;/code&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;T2先将&lt;code&gt;A&lt;/code&gt;加锁, 加锁&lt;code&gt;B&lt;/code&gt;时, 由于T1持有&lt;code&gt;B&lt;/code&gt;, T2被阻塞; T3在同一个容器中查找另一个不相关的成员, 先要加锁&lt;code&gt;A&lt;/code&gt;, &lt;code&gt;A&lt;/code&gt;被T2持有, T3被阻塞&lt;/p&gt;
+
+&lt;p&gt;因此, 这种做法的并发性很差&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;分析2&lt;/h2&gt;
+
+&lt;p&gt;提高并发性的关键是将&lt;code&gt;A&lt;/code&gt;锁过渡到&lt;code&gt;B&lt;/code&gt;锁, 比如这样: &lt;code&gt;A&lt;/code&gt;加锁, 查找&lt;code&gt;B&lt;/code&gt;, &lt;code&gt;A&lt;/code&gt;解锁, &lt;code&gt;B&lt;/code&gt;加锁.&lt;/p&gt;
+
+&lt;p&gt;这种方法解决了并发性, 但显而易见形成了一个无锁区 (从&lt;code&gt;A&lt;/code&gt;解锁到&lt;code&gt;B&lt;/code&gt;加锁这个区域). 如果在无锁区另一个线程将&lt;code&gt;B&lt;/code&gt;销毁或移出容器, 那么后面的&lt;code&gt;B&lt;/code&gt;加锁操作就会悲剧&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;分析3&lt;/h2&gt;
+
+&lt;p&gt;面对无锁区的问题, 可以试着加&lt;code&gt;version&lt;/code&gt;(版本变量)来解决, 规则如下:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;任何将成员移入/移出容器的情况, 都需要获得容器锁&lt;code&gt;A&lt;/code&gt;和成员锁&lt;code&gt;B&lt;/code&gt;, 并在元素&lt;code&gt;version&lt;/code&gt;上加1&lt;/li&gt;
+&lt;li&gt;对成员的销毁, 需要先将成员移出容器&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;这样, 查找成员的流程变为:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;线程T1, 对&lt;code&gt;A&lt;/code&gt;加锁, 找到&lt;code&gt;B&lt;/code&gt;, 记录&lt;code&gt;B&lt;/code&gt;的&lt;code&gt;version&lt;/code&gt;, 记为v1. 对&lt;code&gt;A&lt;/code&gt;解锁&lt;/li&gt;
+&lt;li&gt;线程T2, &lt;code&gt;B&lt;/code&gt;销毁或移出容器, 需要获得&lt;code&gt;A&lt;/code&gt;和&lt;code&gt;B&lt;/code&gt;锁, 对&lt;code&gt;version&lt;/code&gt;加1, 记为v2&lt;/li&gt;
+&lt;li&gt;线程T1, 等到T2释放&lt;code&gt;B&lt;/code&gt;锁后, 可获得&lt;code&gt;B&lt;/code&gt;锁, 发现&lt;code&gt;v1 != v2&lt;/code&gt;, 意味着成员可能在容器中已经被移出或销毁, 则需要重试整个过程&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;加入&lt;code&gt;version&lt;/code&gt;后, 对于销毁成员的场景, 并发性并没有改变 (因为仍然需要同时获得两把锁), 但对于查找成员的场景, 并发性和分析2一样&lt;/p&gt;
+
+&lt;p&gt;不幸的是, 这个场景仍然存在问题, 很容易看到其中一个逻辑问题, T1在T2销毁&lt;code&gt;B&lt;/code&gt;锁后, 还获得了&lt;code&gt;B&lt;/code&gt;锁. 也就是T2不能即刻销毁&lt;code&gt;B&lt;/code&gt;锁, 否则所有等待&lt;code&gt;B&lt;/code&gt;锁的线程都会悲剧. 那&lt;code&gt;B&lt;/code&gt;锁何时能被安全销毁&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_4&#34;&gt;分析4&lt;/h2&gt;
+
+&lt;p&gt;要解决分析3的问题, 可以在&lt;code&gt;B&lt;/code&gt;上添加引用计数, 细节如下:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;在成员未被移出容器时, 持有&lt;code&gt;A&lt;/code&gt;锁可以对成员引用计数&lt;code&gt;usage_count&lt;/code&gt;进行加1, 即在容器中查找成员时, 容器负责对成员的&lt;code&gt;usage_count&lt;/code&gt;加1&lt;/li&gt;
+&lt;li&gt;持有&lt;code&gt;B&lt;/code&gt;锁可以对自己的解引用计数&lt;code&gt;release_count&lt;/code&gt;进行加1, 即使用者在使用完&lt;code&gt;B&lt;/code&gt;后, 对&lt;code&gt;B&lt;/code&gt;进行解引用&lt;/li&gt;
+&lt;li&gt;如果&lt;code&gt;usage_count&lt;/code&gt; == &lt;code&gt;release_count&lt;/code&gt;, 则&lt;code&gt;B&lt;/code&gt;可以被安全销毁&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;usage_count&lt;/code&gt;和&lt;code&gt;release_count&lt;/code&gt;在分别在不同锁的保护下, 代入分析3的场景, 发现可以解决分析3的问题&lt;/p&gt;
+
+&lt;p&gt;还有一些需要说明的边界情况&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;在成员已经被移出容器后, 成员引用计数&lt;code&gt;usage_count&lt;/code&gt;不再受&lt;code&gt;A&lt;/code&gt;锁保护, 而是受&lt;code&gt;B&lt;/code&gt;锁保护. 相当于容器已经不再管理成员的引用计数&lt;/li&gt;
+&lt;li&gt;如何判断&amp;rdquo;成员已经被移出容器&amp;rdquo;, 可以在成员上添加状态量&lt;code&gt;is_removed_from_container&lt;/code&gt;, 读取此状态需要&lt;code&gt;A&lt;/code&gt;锁或&lt;code&gt;B&lt;/code&gt;锁, 修改此状态需要&lt;code&gt;A&lt;/code&gt;锁和&lt;code&gt;B&lt;/code&gt;锁.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&#34;toc_5&#34;&gt;Mysql的实现&lt;/h2&gt;
+
+&lt;p&gt;Mysql的实现和之前的分析大致相同, 给出映射表&lt;/p&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;td&gt;分析里的概念&lt;/td&gt;
+&lt;td&gt;Mysql的变量&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;版本变量&lt;code&gt;version&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_version&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;成员引用计数&lt;code&gt;usage_count&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_ref_usage&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;成员解引用计数&lt;code&gt;release_count&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_ref_release&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;状态量&lt;code&gt;is_removed_from_container&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_is_destroyed&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;实现锁拆分的函数为&lt;code&gt;MDL_map_partition::move_from_hash_to_lock_mutex&lt;/code&gt;, 一看就懂&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>整理一下最近读的MDL源码</title>
+      <link>http://ikarishinjieva.github.io/post/2014-04-04-MDL</link>
+      <pubDate>Fri, 04 Apr 2014 20:00:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-04-04-MDL</guid>
+      <description>
+
+&lt;p&gt;以下都是个人理解, 如有疏漏请斧正
+另, 因为理解不深, 将忽略锁级别以及锁共享的细节&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;MDL&lt;/h2&gt;
+
+&lt;p&gt;MDL (Metadata lock), 除了正常的Condition var提供的功能外, 还额外提供了
+1. 不同的锁级别. 在不冲突的情况下, 允许共享资源
+2. 死锁检查和处理
+3. 记录等待状态, 是死锁检查的基础&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;模型&lt;/h2&gt;
+
+&lt;p&gt;&lt;code&gt;MDL_lock&lt;/code&gt; 表示Mysqld中的一个资源(库/表/&amp;hellip;) 存储在全局结构 &lt;code&gt;mdl_locks (MDL_map)&lt;/code&gt;中, &lt;code&gt;mdl_locks&lt;/code&gt;内有&lt;code&gt;m_partitions&lt;/code&gt; (锁的分区), 用来分散查找lock时的竞争&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;MDL_context&lt;/code&gt; 为MDL上下文接口, 表示一个资源竞争者, THD实现了这个接口, 即一个Mysqld的线程可以是&lt;code&gt;MDL_lock&lt;/code&gt;的资源竞争者&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;MDL_ticket&lt;/code&gt; 表示&lt;code&gt;MDL_lock&lt;/code&gt;的许可或请求, 会同时挂在两处:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;挂在所属&lt;code&gt;MDL_Context&lt;/code&gt;中, 通过&lt;code&gt;MDL_ticket.next_in_context/prev_in_context&lt;/code&gt;组织链表&lt;/li&gt;
+&lt;li&gt;挂在&lt;code&gt;MDL_lock&lt;/code&gt;的队列中, 通过&lt;code&gt;MDL_ticket.next_in_lock/prev_in_lock&lt;/code&gt;组织链表. &lt;code&gt;MDL_lock&lt;/code&gt;的队列分为两种, 一个&lt;code&gt;MDL_ticket&lt;/code&gt;可能会挂在其中之一
+
+&lt;ul&gt;
+&lt;li&gt;挂在&lt;code&gt;MDL_lock&lt;/code&gt;的等待队列(&lt;code&gt;MDL_lock.m_waiting&lt;/code&gt;)中, 表示&lt;code&gt;MDL_ticket&lt;/code&gt;的owner (&lt;code&gt;MDL_context&lt;/code&gt;)正在等待该资源(&lt;code&gt;MDL_lock&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;挂在&lt;code&gt;MDL_lock&lt;/code&gt;的已许可队列(&lt;code&gt;MDL_lock.m_granted&lt;/code&gt;)中, 表示&lt;code&gt;MDL_ticket&lt;/code&gt;的owner (&lt;code&gt;MDL_context&lt;/code&gt;)已经获得该资源(&lt;code&gt;MDL_lock&lt;/code&gt;)&lt;/li&gt;
+&lt;/ul&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;总结一下, &lt;code&gt;MDL_context&lt;/code&gt;和&lt;code&gt;MDL_ticket&lt;/code&gt;的关系是一对多, 一个竞争者可以同时申请/获得多个资源的许可; &lt;code&gt;MDL_ticket&lt;/code&gt;和&lt;code&gt;MDL_lock&lt;/code&gt;的关系是多对一, 可以同时有多个资源许可在竞争一个资源, 或者多个资源许可可以*有条件*地共享一个资源&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;如何获得锁&lt;/h2&gt;
+
+&lt;p&gt;简单分析&lt;code&gt;MDL_context::acquire_lock&lt;/code&gt;方法, 其主要流程是&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    bool MDL_context::acquire_lock(MDL_request *mdl_request, ulong lock_wait_timeout) {
+        ...
+        
+        try_acquire_lock_impl(...) 
+        //尝试不等待立刻获得资源, 如果成功直接返回
+        //以下是等待资源的处理
+        ...
+        lock-&amp;gt;m_waiting.add_ticket(ticket) 
+        //将一个资源申请`ticket`挂入资源`lock`的等待队列`m_waiting`
+        if (lock-&amp;gt;needs_notification(ticket)) {
+            //如果等待资源时需要通知状态, 则不断轮询并通知
+            //将忽略此处的细节
+            ...
+        } else {
+            //等待资源
+            //结果可能是获得资源, 或者超时, 或者异常 (比如被死锁检测机制判定死亡)
+            //`timed_wait`中的实现是等待COND(条件变量)`m_wait.m_COND_wait_status`
+            wait_status= m_wait.timed_wait(...);
+        }
+        //收尾处理
+        m_tickets[mdl_request-&amp;gt;duration].push_front(ticket)
+        //将资源申请`ticket`挂入`MDL_Context.m_tickets`
+        ...
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;记录等待状态&lt;/h2&gt;
+
+&lt;p&gt;之前提到了记录等待状态, 在&lt;code&gt;MDL_context::acquire_lock&lt;/code&gt;方法中可以看到如下代码 (上一节未列出)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    bool MDL_context::acquire_lock(MDL_request *mdl_request, ulong lock_wait_timeout) {
+        m_wait.reset_status();
+        ...
+        will_wait_for(ticket); //其中设置了`m_waiting_for`
+        if (lock-&amp;gt;needs_notification(ticket)) {
+            ...
+            //等待资源
+            wait_status= m_wait.timed_wait(m_owner, &amp;amp;abs_timeout, TRUE,
+                                      mdl_request-&amp;gt;key.get_wait_state_name());
+        } else {
+            //等待资源
+            wait_status= m_wait.timed_wait(m_owner, &amp;amp;abs_timeout, TRUE,
+                                      mdl_request-&amp;gt;key.get_wait_state_name());
+        }
+        done_waiting_for(); //其中清空了`m_waiting_for`
+        ...
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;MDL_context.m_wait&lt;/code&gt;是用来等待资源的工具类, 其中进行等待处理, 并记录等待资源的状态/结果.&lt;/p&gt;
+
+&lt;p&gt;还有一个&lt;code&gt;MDL_context.m_waiting_for&lt;/code&gt;也在记录&lt;code&gt;MDL_context&lt;/code&gt;正在进行的资源申请(&lt;code&gt;MDL_ticket&lt;/code&gt;), 其正在等待某个资源. 实际上&lt;code&gt;m_waiting_for&lt;/code&gt;是冗余的信息, 至于原因源代码中有解释, 此处不冗余说明&amp;hellip;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_4&#34;&gt;如何释放锁&lt;/h2&gt;
+
+&lt;p&gt;释放锁, 需要完成下面几个动作:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;将&lt;code&gt;ticket&lt;/code&gt;从&lt;code&gt;MDL_lock&lt;/code&gt;的数据结构上卸下来&lt;/li&gt;
+&lt;li&gt;调度选择新的锁占有者&lt;/li&gt;
+&lt;li&gt;将&lt;code&gt;ticket&lt;/code&gt;从&lt;code&gt;MDL_context&lt;/code&gt;的数据结构上卸下并回收&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;入口为&lt;code&gt;MDL_context::release_lock&lt;/code&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    void MDL_context::release_lock(enum_mdl_duration duration, MDL_ticket *ticket) 
+    {
+        ...
+        lock-&amp;gt;remove_ticket(&amp;amp;MDL_lock::m_granted, ticket) {
+            //将`ticket`从`MDL_lock`的数据结构上卸下来
+            (this-&amp;gt;*list).remove_ticket(ticket);
+            ...
+            //调度选择新的锁占有者
+            reschedule_waiters();
+        }()
+        
+        //将`ticket`从`MDL_context`的数据结构上卸下并回收
+        m_tickets[duration].remove(ticket);
+        MDL_ticket::destroy(ticket);
+        ...
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;下面说明调度的细节&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_5&#34;&gt;释放锁时的调度&lt;/h2&gt;
+
+&lt;p&gt;调度函数的入口是&lt;code&gt;MDL_lock::reschedule_waiters&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;最简单的调度就是从&lt;code&gt;MDL_lock.m_waiting&lt;/code&gt;队列中取出头元素, 直接将资源调度给头元素即可&lt;/p&gt;
+
+&lt;p&gt;Mysqld在此基础上添加了一个退让条件:
+如果资源连续被&lt;em&gt;高优先级&lt;/em&gt;(比如&lt;code&gt;SNW&lt;/code&gt;/&lt;code&gt;SNRW&lt;/code&gt;/&lt;code&gt;X&lt;/code&gt;锁类型)的&lt;code&gt;ticket&lt;/code&gt;获得, 那么退让一步, 允许资源间隔被调度给_低优先级_的&lt;code&gt;ticket&lt;/code&gt;防止其饿死.&lt;/p&gt;
+
+&lt;p&gt;用&lt;code&gt;MDL_lock::reschedule_waiters&lt;/code&gt;的代码说就是, 如果&lt;code&gt;MDL_lock&lt;/code&gt;被连续分配给&lt;code&gt;hog_lock_types_bitmap()&lt;/code&gt;中定义的_高优先级_类型的&lt;code&gt;ticket&lt;/code&gt;,连续的次数&lt;code&gt;m_hog_lock_count&lt;/code&gt;超过&lt;code&gt;max_write_lock_count&lt;/code&gt;, 那么开启退让条件, 批准第一个&lt;em&gt;非&lt;/em&gt;_高优先级_的&lt;code&gt;ticket&lt;/code&gt;获得资源&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_6&#34;&gt;死锁检测&lt;/h2&gt;
+
+&lt;p&gt;死锁检测的入口是&lt;code&gt;MDL_context::find_deadlock&lt;/code&gt;, 本身原理很简单, 但源码写的很复杂= =. 先说明原理, 再对应源码&lt;/p&gt;
+
+&lt;p&gt;设当前&lt;code&gt;MDL_context&lt;/code&gt;为图的一个节点&lt;code&gt;A&lt;/code&gt;, 从节点&lt;code&gt;A&lt;/code&gt;出发,  找到&lt;code&gt;A&lt;/code&gt;的正在等待的资源&lt;code&gt;L&lt;/code&gt;(&lt;code&gt;A.m_waiting_for.m_lock&lt;/code&gt;)中的&lt;code&gt;m_granted&lt;/code&gt;里的每一个&lt;code&gt;MDL_ticket&lt;/code&gt;对应的&lt;code&gt;MDL_context&lt;/code&gt; &lt;code&gt;B&lt;/code&gt;, 表示&lt;code&gt;A&lt;/code&gt;正在等待&lt;code&gt;B&lt;/code&gt;释放资源&lt;code&gt;L&lt;/code&gt;. 在图中&lt;code&gt;A&lt;/code&gt; -&amp;gt; &lt;code&gt;B&lt;/code&gt; 添加一条有向边&lt;/p&gt;
+
+&lt;p&gt;死锁检查的工作就是遍历这张有向图, 检查其是否存在环路&lt;/p&gt;
+
+&lt;p&gt;以&lt;code&gt;MDL_context::find_deadlock&lt;/code&gt;入口, 展开一些调用来说明代码&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    (MDL_context::find_deadlock)
+    while(1) {
+        visit_subgraph(visitor) {
+            m_waiting_for-&amp;gt;accept_visitor(visitor) {
+                m_lock-&amp;gt;visit_subgraph(this, visitor) {
+                    ...
+                }()
+            }()
+        }()
+        break if no deadlock
+        set deadlock victim
+        break if deadlock victim is current context
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;find_deadlock&lt;/code&gt;以&lt;code&gt;MDL_context.m_waiting_for.m_lock&lt;/code&gt;为起始点, 不断遍历其有向图, 选出victim. 直到
+* 没有发现死锁
+* 或自己被选为victim&lt;/p&gt;
+
+&lt;p&gt;其使用一个visitor (&lt;code&gt;MDL_wait_for_graph_visitor&lt;/code&gt;) 贯穿遍历过程, 其记录了遍历的过程&lt;/p&gt;
+
+&lt;p&gt;再来看&lt;code&gt;MDL_lock::visit_subgraph&lt;/code&gt;, 此函数是以一个&lt;code&gt;MDL_lock&lt;/code&gt;为起点, 来遍历依赖图&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    MDL_lock::visit_subgraph(MDL_ticket *waiting_ticket, MDL_wait_for_graph_visitor *gvisitor) {
+    
+        //此处是因为MDL_context.m_waiting_for是冗余信息, 但无法保证更新同步, 带来的额外操作. 忽略此处细节
+        if (src_ctx-&amp;gt;m_wait.get_status() != MDL_wait::EMPTY) {...}
+        
+        //visitor用来记录遍历层次
+        //当遍历层次大于MAX_SEARCH_DEPTH(32), 也认为发现死锁
+        if (gvisitor-&amp;gt;enter_node(src_ctx)) {...}
+        
+        //由于现在是以一个资源(`MDL_lock`)为视角, 之后的检查为了效率, 遍历会从两个方向同时进行, 即检查节点的出度方向(`MDL_lock.m_granted`)和节点的入度方向(`MDL_lock.m_waiting`). 
+        
+        
+        //为了效率, 死锁检测会先检测距离为1的临近节点, 而先不深度遍历图
+        
+        while ((ticket= granted_it++))
+        {
+          if (ticket-&amp;gt;get_ctx() != src_ctx &amp;amp;&amp;amp;
+              ticket-&amp;gt;is_incompatible_when_granted(waiting_ticket-&amp;gt;get_type()) &amp;amp;&amp;amp;
+              gvisitor-&amp;gt;inspect_edge(ticket-&amp;gt;get_ctx()))
+          {
+            goto end_leave_node;
+          }
+        }
+
+        while ((ticket= waiting_it++))
+        {
+          /* Filter out edges that point to the same node. */
+          if (ticket-&amp;gt;get_ctx() != src_ctx &amp;amp;&amp;amp;
+              ticket-&amp;gt;is_incompatible_when_waiting(waiting_ticket-&amp;gt;get_type()) &amp;amp;&amp;amp;
+              gvisitor-&amp;gt;inspect_edge(ticket-&amp;gt;get_ctx()))
+          {
+            goto end_leave_node;
+          }
+        }
+        
+        //此处开始, 深度遍历图
+        
+        granted_it.rewind();
+        while ((ticket= granted_it++))
+        {
+          if (ticket-&amp;gt;get_ctx() != src_ctx &amp;amp;&amp;amp;
+              ticket-&amp;gt;is_incompatible_when_granted(waiting_ticket-&amp;gt;get_type()) &amp;amp;&amp;amp;
+              ticket-&amp;gt;get_ctx()-&amp;gt;visit_subgraph(gvisitor))
+          {
+            goto end_leave_node;
+          }
+        }
+        
+        waiting_it.rewind();
+        while ((ticket= waiting_it++))
+        {
+          if (ticket-&amp;gt;get_ctx() != src_ctx &amp;amp;&amp;amp;
+              ticket-&amp;gt;is_incompatible_when_waiting(waiting_ticket-&amp;gt;get_type()) &amp;amp;&amp;amp;
+              ticket-&amp;gt;get_ctx()-&amp;gt;visit_subgraph(gvisitor))
+          {
+            goto end_leave_node;
+          }
+        }
+        ...
+        
+        //visitor退栈
+        gvisitor-&amp;gt;leave_node(src_ctx);
+        ...
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;发现死锁后, 会调用&lt;code&gt;Deadlock_detection_visitor::opt_change_victim_to&lt;/code&gt;, 其中进行&lt;code&gt;MDL_context&lt;/code&gt;权重比较, 来选取一个作为victim, 此处忽略细节&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

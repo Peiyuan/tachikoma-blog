@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Org.Ow2.Asm on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/org.ow2.asm/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Tue, 29 Jan 2013 23:00:00 UTC</updated>
+    
+    <item>
+      <title>org.ow2.asm 通过类.class产生asm java代码</title>
+      <link>http://ikarishinjieva.github.io/post/2013-01-29-generate-asm-java-from-classfile</link>
+      <pubDate>Tue, 29 Jan 2013 23:00:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-01-29-generate-asm-java-from-classfile</guid>
+      <description>&lt;p&gt;尝试给&lt;a href=&#34;https://github.com/taobao/TProfiler&#34;&gt;TProfiler&lt;/a&gt;写一些单元测试。难点是如何对byte code injection产生测试夹具。理想的状况是产生一些class byte code，通过transformer，将生成的class载入并测试行为。第一步产生class byte code的代码可以通过asm提供的工具生成:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;java -classpath asm-all-4.1.jar org.objectweb.asm.util.ASMifier org/domain/package/YourClass.class
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;一些参考：
+&lt;a href=&#34;http://asm.ow2.org/doc/faq.html&#34;&gt;ASM的FAQ&lt;/a&gt;，里面的干货很多&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

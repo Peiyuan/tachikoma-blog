@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> Q源码里uncurry函数分析 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>Q源码里uncurry函数分析</h1>
+  <span class="post-date">Mon, Feb 4, 2013      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/q">Q</a> </li>
+      
+        <li><a href="tags/javascript">javascript</a> </li>
+      
+        <li><a href="tags/uncurry">uncurry</a> </li>
+      
+    </ul></span>
+      <p><a href="http://documentup.com/kriskowal/q/">Q</a>里关于uncurry的代码</p>
+
+<pre><code>// Attempt to make generics safe in the face of downstream
+// modifications.
+// There is no situation where this is necessary.
+// If you need a security guarantee, these primordials need to be
+// deeply frozen anyway, and if you don’t need a security guarantee,
+// this is just plain paranoid.
+// However, this does have the nice side-effect of reducing the size
+// of the code by reducing x.call() to merely x(), eliminating many
+// hard-to-minify characters.
+// See Mark Miller’s explanation of what this does.
+// http://wiki.ecmascript.org/doku.php?id=conventions:safe_meta_programming
+var uncurryThis;
+// I have kept both variations because the first is theoretically
+// faster, if bind is available.
+if (Function.prototype.bind) {
+    var Function_bind = Function.prototype.bind;
+    uncurryThis = Function_bind.bind(Function_bind.call);
+} else {
+    uncurryThis = function (f) {
+        return function () {
+            return f.call.apply(f, arguments);
+        };
+    };
+}
+var array_slice = uncurryThis(Array.prototype.slice);
+</code></pre>
+
+<p>Uncurry/反柯西化的定义可参见<a href="http://en.wikipedia.org/wiki/Uncurry">wiki</a>，不是吾等凡人可以理解的。</p>
+
+<p>从结果看，假设想调用[].slice，如果用uncurryThis(Array.prototype.slice)([])这种形式，可以防止其后[].slice被重写或者[].slice.call被重写。保证当前代码被保护起来，不受之后代码函数重写的影响。</p>
+
+<p>对于Q里用到的这种形式，前提条件是Function.prototype.bind和Function.prototype.bind.call在之前不被重写。简单推导array_slice</p>
+
+<pre><code>array_slice = uncurryThis(Array.prototype.slice) 
+= Function.prototype.bind.bind(Function.prototype.bind.call)(Array.prototype.slice)
+= Function.prototype.bind.call.bind(Array.prototype.slice) //Function.prototype.bind.call.bind is safe
+= Array.prototype.slice.call //Array.prototype.slice.call is safe
+//Array.prototype.slice is also safe
+</code></pre>
+
+<p>不过，Q的注释里写的很清楚，uncurry在这里不是必要的&hellip; 写写而已&hellip;</p>
+
+<p>一些参考：</p>
+
+<p><a href="http://wiki.ecmascript.org/doku.php?id=conventions:safe_meta_programming">这篇文章</a> 详细介绍了safe meta programming，对uncurry做了定义和代码演示。</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

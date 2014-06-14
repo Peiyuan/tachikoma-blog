@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> 对Mysql bug #70307 的学习 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>对Mysql bug #70307 的学习</h1>
+  <span class="post-date">Fri, Oct 25, 2013      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/mysql">mysql</a> </li>
+      
+        <li><a href="tags/replication">replication</a> </li>
+      
+        <li><a href="tags/bug">bug</a> </li>
+      
+    </ul></span>
+      
+
+<p>之前描述<a href="http://ikarishinjieva.github.io/blog/blog/2013/10/11/hole-in-mysql-56-replication-dead-lock/">Mysql 5.6.15 Replication中碰到的死锁</a>的情况，这次尝试debug下原因。</p>
+
+<h2 id="toc_0">debug的过程</h2>
+
+<p>用参数&ndash;gdb启动mysql，按照<a href="http://bugs.mysql.com/file.php?id=20542">步骤</a>重现bug（让slave &ldquo;show slave status&rdquo;时卡住）。然后用gdb attach到slave mysql实例上。</p>
+
+<pre><code>(gdb) thread apply all bt
+</code></pre>
+
+<p>输出所有线程的backtrace，找到show slave status卡住的线程和位置</p>
+
+<pre><code>Thread 2 (Thread 0x7f583c166700 (LWP 2440)):
+#0  0x00007f583f484054 in __lll_lock_wait () from /lib64/libpthread.so.0
+#1  0x00007f583f47f3be in _L_lock_995 () from /lib64/libpthread.so.0
+#2  0x00007f583f47f326 in pthread_mutex_lock () from /lib64/libpthread.so.0
+#3  0x0000000000aa3cde in safe_mutex_lock (mp=0x3516ae8, try_lock=0 '\000', file=0xfb8e58 &quot;/home/vagrant/mysql-5.6.12/sql/rpl_slave.cc&quot;, line=2611) at /home/vagrant/mysql-5.6.12/mysys/thr_mutex.c:152
+#4  0x0000000000a4b993 in inline_mysql_mutex_lock (that=0x3516ae8, src_file=0xfb8e58 &quot;/home/vagrant/mysql-5.6.12/sql/rpl_slave.cc&quot;, src_line=2611) at /home/vagrant/mysql-5.6.12/include/mysql/psi/mysql_thread.h:686
+#5  0x0000000000a53cb3 in show_slave_status (thd=0x352e3d0, mi=0x34b4f20) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:2611
+#6  0x00000000007d45f4 in mysql_execute_command (thd=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:2766
+#7  0x00000000007ddc46 in mysql_parse (thd=0x352e3d0, rawbuf=0x7f57ec005010 &quot;show slave status&quot;, length=17, parser_state=0x7f583c165660) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:6187
+#8  0x00000000007d1019 in dispatch_command (command=COM_QUERY, thd=0x352e3d0, packet=0x3534e51 &quot;&quot;, packet_length=17) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:1334
+#9  0x00000000007d017b in do_command (thd=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:1036
+#10 0x0000000000797a08 in do_handle_one_connection (thd_arg=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_connect.cc:977
+#11 0x00000000007974e4 in handle_one_connection (arg=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_connect.cc:893
+#12 0x0000000000aea87a in pfs_spawn_thread (arg=0x351b510) at /home/vagrant/mysql-5.6.12/storage/perfschema/pfs.cc:1855
+#13 0x00007f583f47d851 in start_thread () from /lib64/libpthread.so.0
+#14 0x00007f583e3e890d in clone () from /lib64/libc.so.6
+</code></pre>
+
+<p>可以看到show slave status卡在</p>
+
+<pre><code>#5  0x0000000000a53cb3 in show_slave_status (thd=0x352e3d0, mi=0x34b4f20) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:2611
+</code></pre>
+
+<p>查找源码可以看到show slave status卡在获取锁mi-&gt;rli-&gt;data_lock上<br/>(科普下缩写: mi=master info, rli=relay log info</p>
+
+<p>在gdb中运行命令</p>
+
+<pre><code>(gdb) thread 2
+(gdb) f 5
+(gdb) print mi-&gt;rli-&gt;data_lock
+</code></pre>
+
+<p>切换到thread 2堆栈第5层的上下文，打印出mi-&gt;rli-&gt;data_lock变量，输出如下</p>
+
+<pre><code>$1 = {m_mutex = {global = {__data = {__lock = 0, __count = 0, __owner = 0, __nusers = 0, __kind = 2, __spins = 0,
+    __list = {__prev = 0x0, __next = 0x0}},
+  __size = '\000' &lt;repeats 16 times&gt;, &quot;\002&quot;, '\000' &lt;repeats 22 times&gt;, __align = 0}, mutex = {__data = {
+    __lock = 2, __count = 0, __owner = 2435, __nusers = 1, __kind = 3, __spins = 0, __list = {__prev = 0x0,
+      __next = 0x0}},
+  __size = &quot;\002\000\000\000\000\000\000\000\203\t\000\000\001\000\000\000\003&quot;, '\000' &lt;repeats 22 times&gt;,
+  __align = 2}, file = 0xfa4520 &quot;/home/vagrant/mysql-5.6.12/sql/log_event.cc&quot;, line = 7259, count = 1,
+thread = 140016942216960}, m_psi = 0x0}
+</code></pre>
+
+<p>看到锁的owner是线程(LWP 2435)，为Thread 3</p>
+
+<p>Thread 3的backtrace如下</p>
+
+<pre><code>Thread 3 (Thread 0x7f583c1a7700 (LWP 2435)):
+#0  0x00007f583f4817bb in pthread_cond_timedwait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
+#1  0x0000000000aa429d in safe_cond_timedwait (cond=0x7f57f4000ba8, mp=0x7f57f4000b38, abstime=0x7f583c1a60f0, file=0xedc960 &quot;/home/vagrant/mysql-5.6.12/include/mysql/psi/mysql_thread.h&quot;, line=1199) at /home/vagrant/mysql-5.6.12/mysys/thr_mutex.c:278
+#2  0x00000000007121f4 in inline_mysql_cond_timedwait (that=0x7f57f4000ba8, mutex=0x7f57f4000b38, abstime=0x7f583c1a60f0, src_file=0xedcb98 &quot;/home/vagrant/mysql-5.6.12/sql/mdl.cc&quot;, src_line=1306) at /home/vagrant/mysql-5.6.12/include/mysql/psi/mysql_thread.h:1199
+#3  0x0000000000713111 in MDL_wait::timed_wait (this=0x7f57f4000b38, owner=0x7f57f4000a50, abs_timeout=0x7f583c1a60f0, set_status_on_timeout=true, wait_state_name=0x14d0488) at /home/vagrant/mysql-5.6.12/sql/mdl.cc:1306
+#4  0x0000000000714811 in MDL_context::acquire_lock (this=0x7f57f4000b38, mdl_request=0x7f583c1a6180, lock_wait_timeout=31536000) at /home/vagrant/mysql-5.6.12/sql/mdl.cc:2241
+#5  0x000000000063656a in ha_commit_trans (thd=0x7f57f4000a50, all=true) at /home/vagrant/mysql-5.6.12/sql/handler.cc:1396 (COMMIT LOCK)
+#6  0x00000000008a010b in trans_commit (thd=0x7f57f4000a50) at /home/vagrant/mysql-5.6.12/sql/transaction.cc:228
+#7  0x0000000000a081bb in Xid_log_event::do_commit (this=0x7f57f4004730, thd=0x7f57f4000a50) at /home/vagrant/mysql-5.6.12/sql/log_event.cc:7174
+#8  0x0000000000a0886e in Xid_log_event::do_apply_event (this=0x7f57f4004730, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/log_event.cc:7310 (rli-&gt;data_lock)
+#9  0x00000000009fd956 in Log_event::apply_event (this=0x7f57f4004730, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/log_event.cc:3049
+#10 0x0000000000a55e31 in apply_event_and_update_pos (ptr_ev=0x7f583c1a68a0, thd=0x7f57f4000a50, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:3374
+#11 0x0000000000a56e45 in exec_relay_log_event (thd=0x7f57f4000a50, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:3742
+#12 0x0000000000a5c334 in handle_slave_sql (arg=0x34b4f20) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:5552
+#13 0x0000000000aea87a in pfs_spawn_thread (arg=0x350a800) at /home/vagrant/mysql-5.6.12/storage/perfschema/pfs.cc:1855
+#14 0x00007f583f47d851 in start_thread () from /lib64/libpthread.so.0
+#15 0x00007f583e3e890d in clone () from /lib64/libc.so.6
+</code></pre>
+
+<p>可以看到Thread 3卡在commit lock上，同时查源码看到Thread 3同时占有了rli-&gt;data_lock (log_event.cc:7259)</p>
+
+<h2 id="toc_1">锁的状态</h2>
+
+<p>按照bug的描述，</p>
+
+<ol>
+<li>flush tables with read lock; 会持有commit lock</li>
+<li>IO thread (Thread 3)会持有rli-&gt;data_lock，并等待commit lock</li>
+<li>show slave status; 会等待rli-&gt;data_lock</li>
+</ol>
+
+<p>结果导致show slave status卡住不可用</p>
+
+<h2 id="toc_2">臆测一下解决方法</h2>
+
+<p>鉴于功底不深，只能臆测一下</p>
+
+<ol>
+<li>IO thread持有锁rli-&gt;data_lock的原因是要更新relay log的状态，然后进行commit(Xid_log_event::do_apply_event (log_event.cc:7248))。在commit的时候不会更新rli的数据。</li>
+<li>show slave status不会更新rli的数据，需要锁rli-&gt;data_lock的原因是要一致性数据。</li>
+</ol>
+
+<p>因此可能的解决方案是IO thread持有读写锁，进行commit时转为持有读锁。show slave status只使用读锁。</p>
+
+<p>只是臆测下解决方法，待<a href="http://bugs.mysql.com/bug.php?id=70307">bug #70307</a>修掉时再学习。</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

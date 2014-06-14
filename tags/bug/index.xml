@@ -1,0 +1,503 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Bug on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/bug/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Tue, 01 Apr 2014 13:07:00 UTC</updated>
+    
+    <item>
+      <title>对Mysql bug #70307 的再学习</title>
+      <link>http://ikarishinjieva.github.io/post/2014-04-01-study-mysql-bug-70307-2</link>
+      <pubDate>Tue, 01 Apr 2014 13:07:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-04-01-study-mysql-bug-70307-2</guid>
+      <description>
+
+&lt;p&gt;之前对bug #70307有过&lt;a href=&#34;http://ikarishinjieva.github.io/blog/blog/2013/10/25/study-mysql-bug-70307/&#34;&gt;学习&lt;/a&gt;, 苦于阿兹海默状态, 又花了半天在mysql 5.5.33上探查这个场景的原因&amp;hellip;&lt;/p&gt;
+
+&lt;p&gt;简单记录一下&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;现象&lt;/h2&gt;
+
+&lt;p&gt;mysql进行主从复制, 从机上&lt;code&gt;FLUSH TABLES WITH READ LOCK&lt;/code&gt;后, 进行&lt;code&gt;STOP SLAVE&lt;/code&gt;, 一定概率下 &lt;code&gt;SHOW SLAVE STATUS&lt;/code&gt;卡住&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;重现步骤&lt;/h2&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;td&gt;master&lt;/td&gt;
+&lt;td&gt;slave client 1&lt;/td&gt;
+&lt;td&gt;slave client 2&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;STOP SLAVE IO_THREAD&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;CREATE TABLE TEST.TEST &amp;hellip;&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;FLUSH TABLES WITH READ LOCK&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;START SLAVE IO_THREAD&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;STOP SLAVE&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;SHOW SLAVE STATUS&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;其中, &lt;code&gt;START/STOP SLAVE IO_THREAD&lt;/code&gt;是为了在&lt;code&gt;FLUSH TABLES WITH READ LOCK&lt;/code&gt;时造成slave io_thread有未提交数据&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;死锁原因&lt;/h2&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;code&gt;FLUSH TABLES WITH READ LOCK&lt;/code&gt; 会阻塞IO_THREAD提交数据&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;STOP SLAVE&lt;/code&gt;会等待IO_THREAD结束 (&lt;code&gt;mi-&amp;gt;stop_cond&lt;/code&gt;), 即&lt;code&gt;STOP SLAVE&lt;/code&gt;间接被&lt;code&gt;FLUSH TABLES WITH READ LOCK&lt;/code&gt;阻塞&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;STOP SLAVE&lt;/code&gt;在被阻塞前, 持有了&lt;code&gt;LOCK_active_mi&lt;/code&gt;, 独占了&lt;code&gt;master_info&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;SHOW SLAVE STATUS&lt;/code&gt;会申请锁&lt;code&gt;LOCK_active_mi&lt;/code&gt;, 被&lt;code&gt;STOP SLAVE&lt;/code&gt;阻塞&lt;/li&gt;
+&lt;li&gt;如果&lt;code&gt;SHOW SLAVE STATUS&lt;/code&gt;是由之前&lt;code&gt;FLUSH TABLES WITH READ LOCK&lt;/code&gt;的&lt;code&gt;slave client 1&lt;/code&gt;发出的, 那逻辑上相当于自己在等待自己释放资源&lt;/li&gt;
+&lt;li&gt;从另外的client上&lt;code&gt;UNLOCK TABLES&lt;/code&gt;也解不开&lt;/li&gt;
+&lt;/ol&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>golang, cmd会泄露文件句柄</title>
+      <link>http://ikarishinjieva.github.io/post/2014-03-25-go-leak-fd</link>
+      <pubDate>Tue, 25 Mar 2014 22:34:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-03-25-go-leak-fd</guid>
+      <description>&lt;p&gt;在go中用&lt;code&gt;cmd&lt;/code&gt;生成新的process时, 在某些os中(包括linux的某些版本), 父进程的文件句柄会泄露到子进程中, 参看代码&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    package main
+    
+    import (
+        &amp;quot;fmt&amp;quot;
+        &amp;quot;os&amp;quot;
+        &amp;quot;os/exec&amp;quot;
+    )
+    
+    func main() {
+        a, _ := os.OpenFile(&amp;quot;1&amp;quot;, os.O_CREATE|os.O_RDWR, 0755)
+        defer a.Close()
+        cmd := exec.Command(&amp;quot;sh&amp;quot;, &amp;quot;-c&amp;quot;, &amp;quot;lsof +D .; sleep 3&amp;quot;)
+        output, _ := cmd.CombinedOutput()
+        fmt.Printf(&amp;quot;%v\n&amp;quot;, string(output))
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;得到输出&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    [root@GroupH-HA-1 tmp]# uname -a
+    Linux GroupH-HA-1 2.6.18-194.el5xen #1 SMP Tue Mar 16 22:01:26 EDT 2010 x86_64 x86_64 x86_64 GNU/Linux
+    [root@GroupH-HA-1 tmp]# ./main
+    COMMAND  PID USER   FD   TYPE DEVICE    SIZE    NODE NAME
+    bash    4693 root  cwd    DIR  253,0   32768 3506177 .
+    main    6184 root  cwd    DIR  253,0   32768 3506177 .
+    main    6184 root  txt    REG  253,0 2250464 3506237 ./main
+    main    6184 root    3u   REG  253,0       0 3506238 ./1
+    sh      6189 root  cwd    DIR  253,0   32768 3506177 .
+    sh      6189 root    3u   REG  253,0       0 3506238 ./1
+    lsof    6190 root  cwd    DIR  253,0   32768 3506177 .
+    lsof    6191 root  cwd    DIR  253,0   32768 3506177 .
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;./1&lt;/code&gt;的文件句柄泄漏到了&lt;code&gt;sh -c&lt;/code&gt;中, 目前为止没有特别好的解决方案&lt;/p&gt;
+
+&lt;p&gt;参看&lt;a href=&#34;https://code.google.com/p/go/issues/detail?id=2603&#34;&gt;此处bug描述&lt;/a&gt;&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>GO exec.command.Wait 执行后台程序,在重定向输出时卡住</title>
+      <link>http://ikarishinjieva.github.io/post/2014-02-22-go-exec-command-block-when-redirect-stdout</link>
+      <pubDate>Sat, 22 Feb 2014 10:30:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-02-22-go-exec-command-block-when-redirect-stdout</guid>
+      <description>&lt;p&gt;在GO上发现以下现象&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    c := exec.Command(&amp;quot;sh&amp;quot;, &amp;quot;-c&amp;quot;, &amp;quot;sleep 100 &amp;amp;&amp;quot;)
+    var b bytes.Buffer
+    c.Stdout = &amp;amp;b
+    
+    if e := c.Start(); nil != e {
+        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
+    }
+    if e := c.Wait(); nil != e {
+        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;这个代码会一直等到&lt;code&gt;sleep 100&lt;/code&gt;完成后才退出, 与常识不符.&lt;/p&gt;
+
+&lt;p&gt;但去掉Stdout重定向后, 代码就不会等待卡住&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    c := exec.Command(&amp;quot;sh&amp;quot;, &amp;quot;-c&amp;quot;, &amp;quot;sleep 100 &amp;amp;&amp;quot;)
+    if e := c.Start(); nil != e {
+        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
+    }
+    if e := c.Wait(); nil != e {
+        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在运行时打出stacktrace, 再翻翻GO的源代码, 发现GO卡在以下代码&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    func (c *Cmd) Wait() error {
+        ...
+        state, err := c.Process.Wait()
+        ...
+        var copyError error
+        for _ = range c.goroutine {
+            if err := &amp;lt;-c.errch; err != nil &amp;amp;&amp;amp; copyError == nil {
+                copyError = err
+            }
+        }
+        ...
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;Wait()&lt;/code&gt;在等待Process结束后, 还等待了所有&lt;code&gt;c.goroutine&lt;/code&gt;的&lt;code&gt;c.errch&lt;/code&gt;信号. 参看以下代码:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    func (c *Cmd) stdout() (f *os.File, err error) {
+        return c.writerDescriptor(c.Stdout)
+    }
+    
+    func (c *Cmd) writerDescriptor(w io.Writer) (f *os.File, err error) {
+        ...
+        c.goroutine = append(c.goroutine, func() error {
+            _, err := io.Copy(w, pr)
+            return err
+        })
+        ...
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;重定向&lt;code&gt;stdout&lt;/code&gt;时, 会添加一个监听任务到&lt;code&gt;goroutine&lt;/code&gt; (&lt;code&gt;stderr&lt;/code&gt;也是同理)&lt;/p&gt;
+
+&lt;p&gt;结论是由于将&lt;code&gt;sleep 100&lt;/code&gt;放到后台执行, 其进程&lt;code&gt;stdout&lt;/code&gt;并没有关闭, &lt;code&gt;io.Copy()&lt;/code&gt;不会返回, 所以会卡住&lt;/p&gt;
+
+&lt;p&gt;临时的解决方法就是将后台进程的&lt;code&gt;stdout&lt;/code&gt;和&lt;code&gt;stderr&lt;/code&gt;重定向出去, 以下代码不会卡住:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    c := exec.Command(&amp;quot;sh&amp;quot;, &amp;quot;-c&amp;quot;, &amp;quot;sleep 100 &amp;gt;/dev/null 2&amp;gt;/dev/null &amp;amp;&amp;quot;)
+    var b bytes.Buffer
+    c.Stdout = &amp;amp;b
+    
+    if e := c.Start(); nil != e {
+        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
+    }
+    if e := c.Wait(); nil != e {
+        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;已经报了&lt;a href=&#34;https://code.google.com/p/go/issues/detail?id=7378&amp;amp;thanks=7378&amp;amp;ts=1392967848&#34;&gt;bug&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;但想不出好的GO代码的修改方案&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>jruby中tcp阻塞时Timeout::timeout失效</title>
+      <link>http://ikarishinjieva.github.io/post/2014-01-08-jruby-bug-tcp-timeout</link>
+      <pubDate>Wed, 08 Jan 2014 23:04:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-01-08-jruby-bug-tcp-timeout</guid>
+      <description>
+
+&lt;h2 id=&#34;toc_0&#34;&gt;问题场景&lt;/h2&gt;
+
+&lt;p&gt;首先有一台tcp server, 模拟一个黑洞&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;require &#39;socket&#39;
+
+tcp_server = TCPServer.new(&amp;quot;0.0.0.0&amp;quot;, 6666)
+
+loop do
+     socket = tcp_server.accept
+     puts &#39;got conn&#39;]
+     #blackhole
+end
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;然后发起一个connection, 从server接受消息(很显然会阻塞在recv上), 并用&lt;code&gt;Timeout::timeout&lt;/code&gt;设置一个超时时间&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;require &amp;quot;socket&amp;quot;
+require &amp;quot;timeout&amp;quot;
+
+sock = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM, 0)
+addr = Socket.sockaddr_in(6666, &amp;quot;127.0.0.1&amp;quot;)
+sock.connect(addr)
+
+Timeout::timeout(5) {
+     sock.recv(1)
+} 
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;上面这个场景如果在ruby上跑,5秒后会超时,但如果使用jruby(1.7.6)就会一直处于阻塞&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;解决方案&lt;/h2&gt;
+
+&lt;p&gt;使用非阻塞&lt;code&gt;recv&lt;/code&gt;,可以在jruby上正常运行&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;require &amp;quot;socket&amp;quot;
+require &amp;quot;timeout&amp;quot;
+
+sock = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM, 0)
+addr = Socket.sockaddr_in(6666, &amp;quot;127.0.0.1&amp;quot;)
+sock.connect(addr)
+
+Timeout::timeout(5) {
+    begin
+        sock.recv_nonblock(1)
+    rescue IO::WaitReadable
+        IO.select([sock],nil,nil,5)
+        retry
+    end
+} 
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;猜测&lt;/h2&gt;
+
+&lt;p&gt;查看一下ruby &lt;code&gt;timeout.rb&lt;/code&gt;的源码&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;  begin
+    x = Thread.current
+    y = Thread.start {
+      begin
+        sleep sec
+      rescue =&amp;gt; e
+        x.raise e
+      else
+        x.raise exception, &amp;quot;execution expired&amp;quot;
+      end
+    }
+    return yield(sec)
+  ensure
+    if y
+      y.kill
+      y.join # make sure y is dead.
+    end
+  end
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;大概看到timeout是起了一个计时线程,超时时向主线程发起exception&lt;/p&gt;
+
+&lt;p&gt;猜测是因为jvm的线程模型导致exception不能向阻塞线程提交,但有待验证&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>对Mysql bug #70307 的学习</title>
+      <link>http://ikarishinjieva.github.io/post/2013-10-25-study-mysql-bug-70307</link>
+      <pubDate>Fri, 25 Oct 2013 22:00:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-10-25-study-mysql-bug-70307</guid>
+      <description>
+
+&lt;p&gt;之前描述&lt;a href=&#34;http://ikarishinjieva.github.io/blog/blog/2013/10/11/hole-in-mysql-56-replication-dead-lock/&#34;&gt;Mysql 5.6.15 Replication中碰到的死锁&lt;/a&gt;的情况，这次尝试debug下原因。&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;debug的过程&lt;/h2&gt;
+
+&lt;p&gt;用参数&amp;ndash;gdb启动mysql，按照&lt;a href=&#34;http://bugs.mysql.com/file.php?id=20542&#34;&gt;步骤&lt;/a&gt;重现bug（让slave &amp;ldquo;show slave status&amp;rdquo;时卡住）。然后用gdb attach到slave mysql实例上。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;(gdb) thread apply all bt
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;输出所有线程的backtrace，找到show slave status卡住的线程和位置&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Thread 2 (Thread 0x7f583c166700 (LWP 2440)):
+#0  0x00007f583f484054 in __lll_lock_wait () from /lib64/libpthread.so.0
+#1  0x00007f583f47f3be in _L_lock_995 () from /lib64/libpthread.so.0
+#2  0x00007f583f47f326 in pthread_mutex_lock () from /lib64/libpthread.so.0
+#3  0x0000000000aa3cde in safe_mutex_lock (mp=0x3516ae8, try_lock=0 &#39;\000&#39;, file=0xfb8e58 &amp;quot;/home/vagrant/mysql-5.6.12/sql/rpl_slave.cc&amp;quot;, line=2611) at /home/vagrant/mysql-5.6.12/mysys/thr_mutex.c:152
+#4  0x0000000000a4b993 in inline_mysql_mutex_lock (that=0x3516ae8, src_file=0xfb8e58 &amp;quot;/home/vagrant/mysql-5.6.12/sql/rpl_slave.cc&amp;quot;, src_line=2611) at /home/vagrant/mysql-5.6.12/include/mysql/psi/mysql_thread.h:686
+#5  0x0000000000a53cb3 in show_slave_status (thd=0x352e3d0, mi=0x34b4f20) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:2611
+#6  0x00000000007d45f4 in mysql_execute_command (thd=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:2766
+#7  0x00000000007ddc46 in mysql_parse (thd=0x352e3d0, rawbuf=0x7f57ec005010 &amp;quot;show slave status&amp;quot;, length=17, parser_state=0x7f583c165660) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:6187
+#8  0x00000000007d1019 in dispatch_command (command=COM_QUERY, thd=0x352e3d0, packet=0x3534e51 &amp;quot;&amp;quot;, packet_length=17) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:1334
+#9  0x00000000007d017b in do_command (thd=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:1036
+#10 0x0000000000797a08 in do_handle_one_connection (thd_arg=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_connect.cc:977
+#11 0x00000000007974e4 in handle_one_connection (arg=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_connect.cc:893
+#12 0x0000000000aea87a in pfs_spawn_thread (arg=0x351b510) at /home/vagrant/mysql-5.6.12/storage/perfschema/pfs.cc:1855
+#13 0x00007f583f47d851 in start_thread () from /lib64/libpthread.so.0
+#14 0x00007f583e3e890d in clone () from /lib64/libc.so.6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到show slave status卡在&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#5  0x0000000000a53cb3 in show_slave_status (thd=0x352e3d0, mi=0x34b4f20) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:2611
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;查找源码可以看到show slave status卡在获取锁mi-&amp;gt;rli-&amp;gt;data_lock上&lt;br/&gt;(科普下缩写: mi=master info, rli=relay log info&lt;/p&gt;
+
+&lt;p&gt;在gdb中运行命令&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;(gdb) thread 2
+(gdb) f 5
+(gdb) print mi-&amp;gt;rli-&amp;gt;data_lock
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;切换到thread 2堆栈第5层的上下文，打印出mi-&amp;gt;rli-&amp;gt;data_lock变量，输出如下&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$1 = {m_mutex = {global = {__data = {__lock = 0, __count = 0, __owner = 0, __nusers = 0, __kind = 2, __spins = 0,
+    __list = {__prev = 0x0, __next = 0x0}},
+  __size = &#39;\000&#39; &amp;lt;repeats 16 times&amp;gt;, &amp;quot;\002&amp;quot;, &#39;\000&#39; &amp;lt;repeats 22 times&amp;gt;, __align = 0}, mutex = {__data = {
+    __lock = 2, __count = 0, __owner = 2435, __nusers = 1, __kind = 3, __spins = 0, __list = {__prev = 0x0,
+      __next = 0x0}},
+  __size = &amp;quot;\002\000\000\000\000\000\000\000\203\t\000\000\001\000\000\000\003&amp;quot;, &#39;\000&#39; &amp;lt;repeats 22 times&amp;gt;,
+  __align = 2}, file = 0xfa4520 &amp;quot;/home/vagrant/mysql-5.6.12/sql/log_event.cc&amp;quot;, line = 7259, count = 1,
+thread = 140016942216960}, m_psi = 0x0}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;看到锁的owner是线程(LWP 2435)，为Thread 3&lt;/p&gt;
+
+&lt;p&gt;Thread 3的backtrace如下&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Thread 3 (Thread 0x7f583c1a7700 (LWP 2435)):
+#0  0x00007f583f4817bb in pthread_cond_timedwait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
+#1  0x0000000000aa429d in safe_cond_timedwait (cond=0x7f57f4000ba8, mp=0x7f57f4000b38, abstime=0x7f583c1a60f0, file=0xedc960 &amp;quot;/home/vagrant/mysql-5.6.12/include/mysql/psi/mysql_thread.h&amp;quot;, line=1199) at /home/vagrant/mysql-5.6.12/mysys/thr_mutex.c:278
+#2  0x00000000007121f4 in inline_mysql_cond_timedwait (that=0x7f57f4000ba8, mutex=0x7f57f4000b38, abstime=0x7f583c1a60f0, src_file=0xedcb98 &amp;quot;/home/vagrant/mysql-5.6.12/sql/mdl.cc&amp;quot;, src_line=1306) at /home/vagrant/mysql-5.6.12/include/mysql/psi/mysql_thread.h:1199
+#3  0x0000000000713111 in MDL_wait::timed_wait (this=0x7f57f4000b38, owner=0x7f57f4000a50, abs_timeout=0x7f583c1a60f0, set_status_on_timeout=true, wait_state_name=0x14d0488) at /home/vagrant/mysql-5.6.12/sql/mdl.cc:1306
+#4  0x0000000000714811 in MDL_context::acquire_lock (this=0x7f57f4000b38, mdl_request=0x7f583c1a6180, lock_wait_timeout=31536000) at /home/vagrant/mysql-5.6.12/sql/mdl.cc:2241
+#5  0x000000000063656a in ha_commit_trans (thd=0x7f57f4000a50, all=true) at /home/vagrant/mysql-5.6.12/sql/handler.cc:1396 (COMMIT LOCK)
+#6  0x00000000008a010b in trans_commit (thd=0x7f57f4000a50) at /home/vagrant/mysql-5.6.12/sql/transaction.cc:228
+#7  0x0000000000a081bb in Xid_log_event::do_commit (this=0x7f57f4004730, thd=0x7f57f4000a50) at /home/vagrant/mysql-5.6.12/sql/log_event.cc:7174
+#8  0x0000000000a0886e in Xid_log_event::do_apply_event (this=0x7f57f4004730, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/log_event.cc:7310 (rli-&amp;gt;data_lock)
+#9  0x00000000009fd956 in Log_event::apply_event (this=0x7f57f4004730, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/log_event.cc:3049
+#10 0x0000000000a55e31 in apply_event_and_update_pos (ptr_ev=0x7f583c1a68a0, thd=0x7f57f4000a50, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:3374
+#11 0x0000000000a56e45 in exec_relay_log_event (thd=0x7f57f4000a50, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:3742
+#12 0x0000000000a5c334 in handle_slave_sql (arg=0x34b4f20) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:5552
+#13 0x0000000000aea87a in pfs_spawn_thread (arg=0x350a800) at /home/vagrant/mysql-5.6.12/storage/perfschema/pfs.cc:1855
+#14 0x00007f583f47d851 in start_thread () from /lib64/libpthread.so.0
+#15 0x00007f583e3e890d in clone () from /lib64/libc.so.6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到Thread 3卡在commit lock上，同时查源码看到Thread 3同时占有了rli-&amp;gt;data_lock (log_event.cc:7259)&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;锁的状态&lt;/h2&gt;
+
+&lt;p&gt;按照bug的描述，&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;flush tables with read lock; 会持有commit lock&lt;/li&gt;
+&lt;li&gt;IO thread (Thread 3)会持有rli-&amp;gt;data_lock，并等待commit lock&lt;/li&gt;
+&lt;li&gt;show slave status; 会等待rli-&amp;gt;data_lock&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;结果导致show slave status卡住不可用&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;臆测一下解决方法&lt;/h2&gt;
+
+&lt;p&gt;鉴于功底不深，只能臆测一下&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;IO thread持有锁rli-&amp;gt;data_lock的原因是要更新relay log的状态，然后进行commit(Xid_log_event::do_apply_event (log_event.cc:7248))。在commit的时候不会更新rli的数据。&lt;/li&gt;
+&lt;li&gt;show slave status不会更新rli的数据，需要锁rli-&amp;gt;data_lock的原因是要一致性数据。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;因此可能的解决方案是IO thread持有读写锁，进行commit时转为持有读锁。show slave status只使用读锁。&lt;/p&gt;
+
+&lt;p&gt;只是臆测下解决方法，待&lt;a href=&#34;http://bugs.mysql.com/bug.php?id=70307&#34;&gt;bug #70307&lt;/a&gt;修掉时再学习。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>jruby backtick &#43; jre 6 会卡住</title>
+      <link>http://ikarishinjieva.github.io/post/2013-10-11-jruby-175-jre-6-stdin-bug</link>
+      <pubDate>Fri, 11 Oct 2013 22:03:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-10-11-jruby-175-jre-6-stdin-bug</guid>
+      <description>
+
+&lt;p&gt;最近在jruby 1.7.5 + jre 6上碰到的土亢&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;现象&lt;/h2&gt;
+
+&lt;p&gt;用backtick调用命令，比如&lt;code&gt;./some_script&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;在调用命令之前/同时在terminal输入一些回车，有一定概率backtick的调用会卡住不返回。
+此时再输入一个回车，调用会继续执行并返回。&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;解决&lt;/h2&gt;
+
+&lt;p&gt;一切靠猜&lt;/p&gt;
+
+&lt;p&gt;jruby有个bug：&lt;a href=&#34;http://jira.codehaus.org/browse/JRUBY-4626&#34;&gt;Gaps in STDIN pipe stream if backtick is used&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;Charles Oliver Nutter在comment中写到&amp;rdquo;For JRuby 1.7pre1 on Java 7, this should be fixed; TTY should be handled correctly. For other Java versions, we can&amp;rsquo;t fix this.&amp;ldquo;，于是最方便的就是升级jre到7&lt;/p&gt;
+
+&lt;p&gt;经验证升级jre可以从土亢中爬出来。
+如果难以升级jre，参看&lt;a href=&#34;https://www.ruby-forum.com/topic/4413754&#34;&gt;这里&lt;/a&gt;，这个兄弟做了很全的测试。可以用IO.popen或者Open3.popen3替换backtick。&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;经验&lt;/h2&gt;
+
+&lt;p&gt;jruby有坑，同时也提供了便捷的手段将现有的java项目改成比较爽的样子。这些坑是难以预料的，做好准备，然后一如既往踩过去。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>mysql 5.6.15 replication中碰到的死锁</title>
+      <link>http://ikarishinjieva.github.io/post/2013-10-11-hole-in-mysql-56-replication-dead-lock</link>
+      <pubDate>Fri, 11 Oct 2013 21:21:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-10-11-hole-in-mysql-56-replication-dead-lock</guid>
+      <description>
+
+&lt;p&gt;简述下今天在mysql 5.6.15上碰到的土亢&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;现象&lt;/h2&gt;
+
+&lt;p&gt;mysql开启主从复制时，用meb（MySQL Enterprise Backup）做备份会卡住。同时在slave上show slave status也会卡住。&lt;/p&gt;
+
+&lt;p&gt;查看slave上show processlist，可以看到sql thread的状态为 &amp;ldquo;Waiting for commit lock&amp;rdquo;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;猜测&lt;/h2&gt;
+
+&lt;p&gt;无论是&amp;rdquo;SHOW ENGINE INNODB STATUS&amp;rdquo;还是&amp;rdquo;SHOW OPEN TABLES&amp;rdquo;都没有提供有用的信息，还是一切靠猜&lt;/p&gt;
+
+&lt;p&gt;夜观天象猜到mysql存在bug &lt;a href=&#34;http://bugs.mysql.com/bug.php?id=70307&#34;&gt;&amp;ldquo;Another deadlock on FLUSH TABLES WITH READ LOCK + SHOW SLAVE STATUS&amp;rdquo;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中描述了sql thread开始执行了transaction，但是没有commit的间隙，在slave上FLUSH TABLES WITH READ LOCK，会出现死锁&lt;/p&gt;
+
+&lt;p&gt;于是猜测，如果meb恰好在slave上某个transaction commit之前做了FLUSH TABLES WITH READ LOCK，然后调用了与&amp;rdquo;SHOW SLAVE STATUS&amp;rdquo;类似的机制获取slave info，那么就会如bug所述卡住。然后mysql由于TABLE LOCk的存在，sql thread也就会卡住。&lt;/p&gt;
+
+&lt;p&gt;BTW：搜一下mysql bug库，会有一些描述类似的bug，其中70307描述最靠谱，且有详细的&lt;a href=&#34;http://bugs.mysql.com/file.php?id=20542&#34;&gt;重现步骤&lt;/a&gt;，我也成功在mysql 5.6.15上重现了bug。&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;结果&lt;/h2&gt;
+
+&lt;p&gt;实验后证明猜对了&amp;hellip;&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

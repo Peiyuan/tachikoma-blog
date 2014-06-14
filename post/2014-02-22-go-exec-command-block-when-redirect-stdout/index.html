@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> GO exec.command.Wait 执行后台程序,在重定向输出时卡住 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>GO exec.command.Wait 执行后台程序,在重定向输出时卡住</h1>
+  <span class="post-date">Sat, Feb 22, 2014      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/go">go</a> </li>
+      
+        <li><a href="tags/bug">bug</a> </li>
+      
+    </ul></span>
+      <p>在GO上发现以下现象</p>
+
+<pre><code>    c := exec.Command(&quot;sh&quot;, &quot;-c&quot;, &quot;sleep 100 &amp;&quot;)
+    var b bytes.Buffer
+    c.Stdout = &amp;b
+    
+    if e := c.Start(); nil != e {
+        fmt.Printf(&quot;ERROR: %v\n&quot;, e)
+    }
+    if e := c.Wait(); nil != e {
+        fmt.Printf(&quot;ERROR: %v\n&quot;, e)
+    }
+</code></pre>
+
+<p>这个代码会一直等到<code>sleep 100</code>完成后才退出, 与常识不符.</p>
+
+<p>但去掉Stdout重定向后, 代码就不会等待卡住</p>
+
+<pre><code>    c := exec.Command(&quot;sh&quot;, &quot;-c&quot;, &quot;sleep 100 &amp;&quot;)
+    if e := c.Start(); nil != e {
+        fmt.Printf(&quot;ERROR: %v\n&quot;, e)
+    }
+    if e := c.Wait(); nil != e {
+        fmt.Printf(&quot;ERROR: %v\n&quot;, e)
+    }
+</code></pre>
+
+<p>在运行时打出stacktrace, 再翻翻GO的源代码, 发现GO卡在以下代码</p>
+
+<pre><code>    func (c *Cmd) Wait() error {
+        ...
+        state, err := c.Process.Wait()
+        ...
+        var copyError error
+        for _ = range c.goroutine {
+            if err := &lt;-c.errch; err != nil &amp;&amp; copyError == nil {
+                copyError = err
+            }
+        }
+        ...
+    }
+</code></pre>
+
+<p>可以看到<code>Wait()</code>在等待Process结束后, 还等待了所有<code>c.goroutine</code>的<code>c.errch</code>信号. 参看以下代码:</p>
+
+<pre><code>    func (c *Cmd) stdout() (f *os.File, err error) {
+        return c.writerDescriptor(c.Stdout)
+    }
+    
+    func (c *Cmd) writerDescriptor(w io.Writer) (f *os.File, err error) {
+        ...
+        c.goroutine = append(c.goroutine, func() error {
+            _, err := io.Copy(w, pr)
+            return err
+        })
+        ...
+    }
+</code></pre>
+
+<p>重定向<code>stdout</code>时, 会添加一个监听任务到<code>goroutine</code> (<code>stderr</code>也是同理)</p>
+
+<p>结论是由于将<code>sleep 100</code>放到后台执行, 其进程<code>stdout</code>并没有关闭, <code>io.Copy()</code>不会返回, 所以会卡住</p>
+
+<p>临时的解决方法就是将后台进程的<code>stdout</code>和<code>stderr</code>重定向出去, 以下代码不会卡住:</p>
+
+<pre><code>    c := exec.Command(&quot;sh&quot;, &quot;-c&quot;, &quot;sleep 100 &gt;/dev/null 2&gt;/dev/null &amp;&quot;)
+    var b bytes.Buffer
+    c.Stdout = &amp;b
+    
+    if e := c.Start(); nil != e {
+        fmt.Printf(&quot;ERROR: %v\n&quot;, e)
+    }
+    if e := c.Wait(); nil != e {
+        fmt.Printf(&quot;ERROR: %v\n&quot;, e)
+    }
+</code></pre>
+
+<p>已经报了<a href="https://code.google.com/p/go/issues/detail?id=7378&amp;thanks=7378&amp;ts=1392967848">bug</a></p>
+
+<p>但想不出好的GO代码的修改方案</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

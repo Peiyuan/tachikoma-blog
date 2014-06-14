@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Memory on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/memory/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Mon, 11 Nov 2013 20:44:00 UTC</updated>
+    
+    <item>
+      <title>对Memory Reordering Caught in the Act的学习 续 - 关于go的部分</title>
+      <link>http://ikarishinjieva.github.io/post/2013-11-11-study-memory-reorder-cont</link>
+      <pubDate>Mon, 11 Nov 2013 20:44:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-11-11-study-memory-reorder-cont</guid>
+      <description>
+
+&lt;p&gt;这篇主要解决&lt;a href=&#34;http://ikarishinjieva.github.io/blog/blog/2013/11/07/study-memory-reorder/&#34;&gt;上一篇&lt;/a&gt;遗留下来的问题，问题的简要描述请参看&lt;a href=&#34;http://stackoverflow.com/questions/19901615/why-go-doesnt-show-memory-reordering&#34;&gt;我发在SO上的帖子&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;主要的问题是用c++可以重现memory reordering，但go的程序没有重现&lt;/p&gt;
+
+&lt;p&gt;主要的结论是写go的时候我忘记设置GOMAXPROC，在目前这个go版本(1.2 rc2)下，不设置GOMAXPROC goroutine不会并发的，自然也没法设置memory reordering&lt;/p&gt;
+
+&lt;p&gt;此篇主要内容到此结束，以下是这两天的一些探索过程和技巧，觉得还是挺有意思的&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;go tool生成的汇编码和真实的汇编码是有很大差距的&lt;/h2&gt;
+
+&lt;p&gt;这个结论并不奇怪，但是差异的程度还是会影响诸如lock-free的代码的使用前提&lt;/p&gt;
+
+&lt;p&gt;对以下代码做对比&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;x = 1
+r1 = y
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;使用&lt;code&gt;go tool 6g -S xxx.go&lt;/code&gt;反编译后的代码&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;0246 (a.go:25) MOVQ    $1,x+0(SB)   //X=1
+0247 (a.go:26) MOVQ    y+0(SB),BX
+0248 (a.go:26) MOVQ    BX,r1+0(SB)  //r1=Y
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;而真实运行在cpu上的代码（&lt;code&gt;ndisasm -b 32 xxx&lt;/code&gt;)为&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;000013EB  C70425787F170001  mov dword [0x177f78],0x1     //X=1
+         -000000
+000013F6  48                dec eax
+000013F7  8B1C25807F1700    mov ebx,[0x177f80]
+000013FE  48                dec eax
+000013FF  891C25687F1700    mov [0x177f68],ebx          //r1=Y
+00001406  48                dec eax
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到在访问共享内存的前后多出了&lt;code&gt;dec eax&lt;/code&gt;作为margin，这个原因不明，也没有找到相应的资料&lt;/p&gt;
+
+&lt;p&gt;但总的来说&lt;code&gt;ndisasm&lt;/code&gt;产生的汇编代码更方便于对go行为的理解&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;一个小技巧快速定位汇编码&lt;/h2&gt;
+
+&lt;p&gt;我对intel指令集和go的编译器知之甚少，读起汇编码来颇为费劲。&lt;/p&gt;
+
+&lt;p&gt;快速定位源码对应的汇编码的位置，比较方便的就是修改一个数值，比如x=1改为x=2，前后生成的汇编码diff一下，就可以大概确定位置了&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;替换c++生成文件的指令&lt;/h2&gt;
+
+&lt;p&gt;在探索过程中，我想做个对比实验来证明是否上面所说的&lt;code&gt;dec eax&lt;/code&gt;引起了c++和go在memory reordering上的差异，于是就想将&lt;code&gt;dec eax&lt;/code&gt;也加到c++的生成文件中，这样就可以对比效果&lt;/p&gt;
+
+&lt;p&gt;碰到的问题是如果我直接将&lt;code&gt;asm volatile(&amp;quot;dec %eax&amp;quot;)&lt;/code&gt;直接加到c++源码中，生成的汇编代码不是&lt;code&gt;48&lt;/code&gt;，而是&lt;code&gt;FExxxx&lt;/code&gt;。翻看&lt;a href=&#34;http://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-vol-2a-manual.pdf&#34;&gt;Intel® 64 and IA-32 Architectures
+Software Developer’s Manual&lt;/a&gt;，可知&lt;code&gt;dec&lt;/code&gt;有多种形式&lt;/p&gt;
+
+&lt;p&gt;但是我不想研究为什么编译器会选择&lt;code&gt;FExxxx&lt;/code&gt;而不是&lt;code&gt;48&lt;/code&gt;，而是想尽快将c++生成的汇编代码形式做成和go一样。于是就有了下面的步骤：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;code&gt;48&lt;/code&gt;有两个字节，我也选取两个字节的op写在c++源码中，比如&lt;code&gt;asm volatile(&amp;quot;cli&amp;quot;)&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;c++编译生成，然后用16进制编辑器将&lt;code&gt;cli&lt;/code&gt;生成的两个字节换成&lt;code&gt;48&lt;/code&gt;即可&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;之所以选择替换是因为怕有checksum或者内存位置的偏移，我也不知道有还是没有&amp;hellip;&lt;/p&gt;
+
+&lt;p&gt;对比实验证明&lt;code&gt;dec eax&lt;/code&gt;不是引起差异的原因&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>对Memory Reordering Caught in the Act的学习</title>
+      <link>http://ikarishinjieva.github.io/post/2013-11-07-study-memory-reorder</link>
+      <pubDate>Thu, 07 Nov 2013 21:40:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-11-07-study-memory-reorder</guid>
+      <description>&lt;p&gt;最近迷上了preshing.com，真的是非常专业的blog，每篇深浅合适而且可以相互印证，达到出书的质量了&lt;/p&gt;
+
+&lt;p&gt;学习了&lt;a href=&#34;http://preshing.com/20120515/memory-reordering-caught-in-the-act/&#34;&gt;Memory Reordering Caught in the Act&lt;/a&gt;，内容很简单，主要是说“即使汇编码是顺序的，CPU执行时会对Load-Save进行乱序执行，导致无锁的两线程出现意料之外的结果”&lt;/p&gt;
+
+&lt;p&gt;简述一下：&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;首先我们有两个线程，Ta和Tb，且有四个公共变量，a,b,r1,r2&lt;/li&gt;
+&lt;li&gt;Ta的代码是 a=1, r1=b&lt;/li&gt;
+&lt;li&gt;Tb的代码是 b=1, r2=a&lt;/li&gt;
+&lt;li&gt;保证编译器不做乱序优化&lt;/li&gt;
+&lt;li&gt;由于两个线程的读都在写之后，那么理论上，r1和r2中至少有一个应为1，或者都为1&lt;/li&gt;
+&lt;li&gt;但实际并非如此&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;原因是CPU会做乱序执行，因为Ta/Tb的代码乱序后，比如r1=b, a=1，从单线程的角度来看对结果没有影响。而对于多线程，就会出现r1=r2=0的状况&lt;/p&gt;
+
+&lt;p&gt;解决方案是在两句之间插入Load-Save fence，参看&lt;a href=&#34;http://preshing.com/20120710/memory-barriers-are-like-source-control-operations/&#34;&gt;这里&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;我自己用go想重现这个场景，代码参看最后。但是奇怪的是go的编译码跟文章描述的差不多&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    [thread 1]
+    ...
+    MOVQ    $1,a+0(SB)
+    MOVQ    b+0(SB),BX
+    MOVQ    BX,r1+0(SB)
+    
+    [thread 2]
+    MOVQ    $1,b+0(SB)
+    MOVQ    a+0(SB),BX
+    MOVQ    BX,r2+0(SB)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;但是在MBP (Intel Core i7)上跑并没有出现CPU乱序的现象，希望有同学能帮我提供线索，谢谢&lt;/p&gt;
+
+&lt;p&gt;(2013.11.11 更新：关于以上现象的原因参看&lt;a href=&#34;http://ikarishinjieva.github.io/blog/blog/2013/11/11/study-memory-reorder-cont/&#34;&gt;续 - 关于go的部分&lt;/a&gt;)&lt;/p&gt;
+
+&lt;p&gt;go 代码：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    package main
+    
+    import (
+        &amp;quot;fmt&amp;quot;
+        &amp;quot;math/rand&amp;quot;
+    )
+    
+    var x, y, r1, r2 int
+    var detected = 0
+    
+    func randWait() {
+        for rand.Intn(8) != 0 {
+        }
+    }
+    
+    func main() {
+        beginSig1 := make(chan bool, 1)
+        beginSig2 := make(chan bool, 1)
+        endSig1 := make(chan bool, 1)
+        endSig2 := make(chan bool, 1)
+        go func() {
+            for {
+                &amp;lt;-beginSig1
+                randWait()
+                x = 1
+                r1 = y
+                endSig1 &amp;lt;- true
+            }
+        }()
+        go func() {
+            for {
+                &amp;lt;-beginSig2
+                randWait()
+                y = 1
+                r2 = x
+                endSig2 &amp;lt;- true
+            }
+        }()
+        for i := 1; ; i = i + 1 {
+            x = 0
+            y = 0
+            beginSig1 &amp;lt;- true
+            beginSig2 &amp;lt;- true
+            &amp;lt;-endSig1
+            &amp;lt;-endSig2
+            if r1 == 0 &amp;amp;&amp;amp; r2 == 0 {
+                detected = detected + 1
+                fmt.Println(detected, &amp;quot;reorders detected after &amp;quot;, i, &amp;quot;iterations&amp;quot;)
+            }
+        }
+    }
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Java off-heap的一些参考</title>
+      <link>http://ikarishinjieva.github.io/post/2013-05-18-java-offheap-memory</link>
+      <pubDate>Sat, 18 May 2013 23:00:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-05-18-java-offheap-memory</guid>
+      <description>&lt;p&gt;读了Hazelcast的文档，很有意思的部分是&amp;rdquo;Elastic Memory&amp;rdquo;，为了减少GC，用到了java off-heap(off-heap允许Java直接操作内存空间, 类似于C的malloc和free)。之前孤陋寡闻，记录一些off-heap的参考。&lt;/p&gt;
+
+&lt;p&gt;.1.做了以下对比试验，来对比Heap和Non-heap&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;public class HeapAllocation {
+    public static void main(String[] args) {
+        while (true) {
+            Integer[] a = new Integer[1000000];
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;import java.lang.reflect.Field;
+
+public class OffHeapAllocation {
+
+    private static Unsafe unsafe;
+
+    static {
+        try {
+            Field field = Unsafe.class.getDeclaredField(&amp;quot;theUnsafe&amp;quot;);
+            field.setAccessible(true);
+            unsafe = (Unsafe)field.get(null);
+        } catch(Exception e) {
+        }
+    }
+
+    public static void main(String[] args) {
+        while (true) {
+            long addr = unsafe.allocateMemory(8 * 1000000);
+            unsafe.freeMemory(addr);
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Heap GC的测试结果：
+&lt;img src=&#34;../../blog-img/2013-05-18-java-offheap-memory-0.png&#34; alt=&#34;Heap GC的测试结果&#34; title=&#34;Heap GC的测试结果&#34; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Off-heap GC的测试结果：
+&lt;img src=&#34;../../blog-img/2013-05-18-java-offheap-memory-1.png&#34; alt=&#34;Off-heap GC的测试结果&#34; title=&#34;Off-heap GC的测试结果&#34; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;尽管这种测试没啥意义，只能给个直观感受，还是可以看到Heap GC Pause Time还是很多的。&lt;/p&gt;
+
+&lt;p&gt;.2.&lt;a href=&#34;http://mentablog.soliveirajr.com/2012/11/which-one-is-faster-java-heap-or-native-memory&#34;&gt;这篇文章&lt;/a&gt; 对off-heap的性能做了全面的对比。&lt;/p&gt;
+
+&lt;p&gt;结论是heap access要快于off-heap，但off-heap在躲开GC pause和开大内存的时候明显优秀。&lt;/p&gt;
+
+&lt;p&gt;有趣的是在评论一楼Peter Lawrey指出JIT会影响这个测试，于是作者重做测试以证明JIT不影响结论。&lt;/p&gt;
+
+&lt;p&gt;.3.&lt;a href=&#34;http://mentablog.soliveirajr.com/2012/11/real-time-java-programming-without-gc&#34;&gt;这篇文章&lt;/a&gt; 讨论了如何让Java避开GC并提供了memory的测试类GCUtils。&lt;/p&gt;
+
+&lt;p&gt;.4.&lt;a href=&#34;http://stackoverflow.com/questions/12246533/where-to-find-the-evidence-of-how-to-calculate-the-size-of-a-java-object&#34;&gt;在这里&lt;/a&gt; Peter Lawrey谈到了如何测量一个Java对象的大小和TLAB对测量的影响。仅供参考。&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Java on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/java/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Thu, 29 Aug 2013 21:22:00 UTC</updated>
+    
+    <item>
+      <title>jruby重写java项目的一些总结</title>
+      <link>http://ikarishinjieva.github.io/post/2013-08-29-rewrite-project-into-ruby</link>
+      <pubDate>Thu, 29 Aug 2013 21:22:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-08-29-rewrite-project-into-ruby</guid>
+      <description>
+
+&lt;p&gt;久不更新了，6月换了工作&lt;/p&gt;
+
+&lt;p&gt;最近将一个小项目从java迁移到了jruby，在此总结一下&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;从结果开始&lt;/h2&gt;
+
+&lt;p&gt;.1.代码量上的比较&lt;/p&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;td&gt;*&lt;/td&gt;
+&lt;td&gt;纯Java项目&lt;/td&gt;
+&lt;td&gt;Jruby项目&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;主代码行数&lt;/td&gt;
+&lt;td&gt;4073&lt;/td&gt;
+&lt;td&gt;2689 - 454&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;测试代码行数&lt;/td&gt;
+&lt;td&gt;1707&lt;/td&gt;
+&lt;td&gt;1485 - 319&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;其中Jruby项目中有454行主代码和319行测试代码为新加功能&lt;/p&gt;
+
+&lt;p&gt;结论是在迁移了所有功能后，主代码量减少了45%+，测试代码比例从41%增加到52%，测试case数也增加&lt;/p&gt;
+
+&lt;p&gt;.2.DSL&lt;/p&gt;
+
+&lt;p&gt;在迁移过程中，加入了一些DSL，让代码变得更可读，类似于&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;unless can_load local_node.config.from_file
+    load local_node.config, :sip_ip
+    cluster.join local_node.config.sip_ip
+    cluster.lock &amp;quot;lock_config&amp;quot; do
+        load_remote_global_config
+        load local_node.config, with(@remote_global_config)
+        dump local_node.config
+    end
+else
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;如果了所有符号，就变成稍微(!)可读的一篇描述&lt;/p&gt;
+
+&lt;p&gt;.3.部署&lt;/p&gt;
+
+&lt;p&gt;jruby可以被编译成class，打成jar，跑在一切有jvm和jruby jar的地方。与现有java项目的融合不成问题，此次也是迁移了整个项目中的一部分，其他部分保留java&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;一些细节&lt;/h2&gt;
+
+&lt;p&gt;.1.代码量的减少&lt;/p&gt;
+
+&lt;p&gt;抛弃脚本语言的优势论不谈，实践中，代码量的明显减少来自于以下几个方面：&lt;/p&gt;
+
+&lt;p&gt;1.1.调用命令行更方便，在纯java中调用命令行比较烦，即使封装半天也很不爽。代码量差别不是很大，主要是不爽&lt;/p&gt;
+
+&lt;p&gt;1.2.闭包。java中传递闭包得靠实现匿名接口，冗长麻烦，影响函数的复用。（要不定义多个函数，要不到处new interface）&lt;/p&gt;
+
+&lt;p&gt;1.3.mixin。奇怪的是我混入的往往不是特性，而是辅助函数&amp;hellip; 尽管这种方法不正规，但对于小类来说非常实用。比较以下两段代码&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;class A
+    def aaaa
+        XxxUtils.blabla ...
+        YyyHelper.blublu ...
+    end
+end
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;class A
+    include XxxUtils, YyyHelper
+    def aaaa
+        blabla ...
+        blublu ...
+    end
+end
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;如果你跟我一样厌恶到处都是Utils、Helper，又比较烦static import&amp;hellip;&lt;/p&gt;
+
+&lt;p&gt;&amp;ldquo;mixin太多很容易命名冲突引起问题&amp;rdquo;，不得不承认这个担心是对的，我爽我的，谁爱操心谁操心吧。顺便提一句，名空间冲突解决最好的方法还数node.js的。&lt;/p&gt;
+
+&lt;p&gt;1.4.标准库。不得不承认，ruby标准库的人性化做的非常好，链调用能节省很多无用的代码&lt;/p&gt;
+
+&lt;p&gt;1.5.rspec mock。以前用java尽量避免用mock framework，都是用继承注入，太费代码以至于自己都觉得烦（尽管有IDEA的自动代码折叠，还是觉得烦），到处都是注入点的代码也很乱。
+   这是一个很难解决的平衡，如果每一段代码都是上下文封闭的，那么代码很容易测试，但处理输入输出需要大量工作，如果不是，那测试就需要mock。
+   尝试了rspec mock后（我相信任何mock framework都一样），觉得还不错，目前还没有失控的主要原因是每次mock不超过两层。&lt;/p&gt;
+
+&lt;p&gt;最后，&amp;rdquo;代码行数不是XXX标准&amp;rdquo;，是的，我只是减少了无用代码元素在项目中的分布&lt;/p&gt;
+
+&lt;p&gt;.2.DSL/HSL(Human-specific language)&lt;/p&gt;
+
+&lt;p&gt;关于DSL的尝试还很初级，主要目的是读起来通顺，拘泥于以下几种形式：&lt;/p&gt;
+
+&lt;p&gt;2.1.函数名alias。每次写代码的时候是不是纠结于用[].exist、[].exists，或者[].exists?。实践中都是先流畅的（！）写函数梗概，不纠结调用的函数是不是存在，爱怎么用怎么用吧，不存在就alias一下。一切以写作顺畅为目的。&lt;/p&gt;
+
+&lt;p&gt;2.2.mixin。如前面提到的，mixin提供了忽略类名的偏门，可以写出一句流畅的人话，比如cp file，而不是FileUtils.cp file&lt;/p&gt;
+
+&lt;p&gt;2.3.动词函数。比较array.collect和collect array，我喜欢后面那款。动词函数，让&amp;rdquo;宾.动&amp;rdquo;的OO非人话，转换成&amp;rdquo;动宾&amp;rdquo;的人话。当然除非你是古文爱好者&lt;/p&gt;
+
+&lt;p&gt;2.4.&amp;ldquo;介词&amp;rdquo;空函数。就是些输出=输入的空函数，比如之前例中&amp;rdquo;unless can_load local_node.config.from_file&amp;rdquo;的can_load就是空函数，较之&amp;rdquo;unless local_node.config.load_from_file?&amp;ldquo;更有人味&lt;/p&gt;
+
+&lt;p&gt;2.5.最后，以上几种形式都没有Domain-specific，而是Human-specific。关于DSL的尝试还没有深入到domain的阶段，先从让程序说人话开始&lt;/p&gt;
+
+&lt;p&gt;2.6.难以否认的部分：像所有的城市规划一样，整洁的背后都会藏着付出代价的区域，DSL的背后也会有支持代码，初次读支持代码会发现他们怪异、畸形、目的非常不明确，配合用例才能读懂。
+   如何更好的管理这部分付出牺牲的代码值得讨论&lt;/p&gt;
+
+&lt;p&gt;.3.部署和测试&lt;/p&gt;
+
+&lt;p&gt;简单描述一下当前部署方案中的要点&lt;/p&gt;
+
+&lt;p&gt;3.1.跑测试时不用编译，直接跑rb脚本。部署时才编译。可以节省测试时间。&lt;/p&gt;
+
+&lt;p&gt;3.2.程序运行是用java -cp &amp;hellip;/jruby.jar com.xxx.XXX。测试运行是用java -cp &amp;hellip;/jruby.jar org.jruby.Main -S blabla&lt;/p&gt;
+
+&lt;p&gt;3.3.GEM_HOME 和 GEM_PATH 指向特定folder，用上面的命令安装gem即可将gem安装到指向的folder&lt;/p&gt;
+
+&lt;p&gt;3.4.编译用jrubyc，打jar包的脚本需要自己写&lt;/p&gt;
+
+&lt;p&gt;PS: 写个简单的watchr脚本，可以让主文件和相应的测试文件保存时，自动跑相应的测试，非常省事&lt;/p&gt;
+
+&lt;p&gt;.4.一些缺陷&lt;/p&gt;
+
+&lt;p&gt;不得不承认的缺陷还有很多&lt;/p&gt;
+
+&lt;p&gt;4.1.不是所有项目能平滑接入jruby，之前的确碰到过jruby和EclipseLink的冲突，与boot classpath相关，具体原因不祥。建议迁移前先搭原型进行测试&lt;/p&gt;
+
+&lt;p&gt;4.2.（这条来自于实践经验）HSL(Human-specific language) 不是能全面实现的，只能在程序里的一部分实现，而且随着代码量的增加，支持代码的维护估计会显得吃力。（但是写起来的确很爽）&lt;/p&gt;
+
+&lt;p&gt;4.3.改进后的代码也不是完全可读，难以忽略一些语言元素，也没法忽略业务背景&lt;/p&gt;
+
+&lt;p&gt;4.4.写单元测试吧，懒不是个办法&amp;hellip;&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Java off-heap的一些参考</title>
+      <link>http://ikarishinjieva.github.io/post/2013-05-18-java-offheap-memory</link>
+      <pubDate>Sat, 18 May 2013 23:00:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-05-18-java-offheap-memory</guid>
+      <description>&lt;p&gt;读了Hazelcast的文档，很有意思的部分是&amp;rdquo;Elastic Memory&amp;rdquo;，为了减少GC，用到了java off-heap(off-heap允许Java直接操作内存空间, 类似于C的malloc和free)。之前孤陋寡闻，记录一些off-heap的参考。&lt;/p&gt;
+
+&lt;p&gt;.1.做了以下对比试验，来对比Heap和Non-heap&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;public class HeapAllocation {
+    public static void main(String[] args) {
+        while (true) {
+            Integer[] a = new Integer[1000000];
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;import java.lang.reflect.Field;
+
+public class OffHeapAllocation {
+
+    private static Unsafe unsafe;
+
+    static {
+        try {
+            Field field = Unsafe.class.getDeclaredField(&amp;quot;theUnsafe&amp;quot;);
+            field.setAccessible(true);
+            unsafe = (Unsafe)field.get(null);
+        } catch(Exception e) {
+        }
+    }
+
+    public static void main(String[] args) {
+        while (true) {
+            long addr = unsafe.allocateMemory(8 * 1000000);
+            unsafe.freeMemory(addr);
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Heap GC的测试结果：
+&lt;img src=&#34;../../blog-img/2013-05-18-java-offheap-memory-0.png&#34; alt=&#34;Heap GC的测试结果&#34; title=&#34;Heap GC的测试结果&#34; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Off-heap GC的测试结果：
+&lt;img src=&#34;../../blog-img/2013-05-18-java-offheap-memory-1.png&#34; alt=&#34;Off-heap GC的测试结果&#34; title=&#34;Off-heap GC的测试结果&#34; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;尽管这种测试没啥意义，只能给个直观感受，还是可以看到Heap GC Pause Time还是很多的。&lt;/p&gt;
+
+&lt;p&gt;.2.&lt;a href=&#34;http://mentablog.soliveirajr.com/2012/11/which-one-is-faster-java-heap-or-native-memory&#34;&gt;这篇文章&lt;/a&gt; 对off-heap的性能做了全面的对比。&lt;/p&gt;
+
+&lt;p&gt;结论是heap access要快于off-heap，但off-heap在躲开GC pause和开大内存的时候明显优秀。&lt;/p&gt;
+
+&lt;p&gt;有趣的是在评论一楼Peter Lawrey指出JIT会影响这个测试，于是作者重做测试以证明JIT不影响结论。&lt;/p&gt;
+
+&lt;p&gt;.3.&lt;a href=&#34;http://mentablog.soliveirajr.com/2012/11/real-time-java-programming-without-gc&#34;&gt;这篇文章&lt;/a&gt; 讨论了如何让Java避开GC并提供了memory的测试类GCUtils。&lt;/p&gt;
+
+&lt;p&gt;.4.&lt;a href=&#34;http://stackoverflow.com/questions/12246533/where-to-find-the-evidence-of-how-to-calculate-the-size-of-a-java-object&#34;&gt;在这里&lt;/a&gt; Peter Lawrey谈到了如何测量一个Java对象的大小和TLAB对测量的影响。仅供参考。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>我写了半辈子程序 &amp; java的重载方法选择基于编译期参数类型</title>
+      <link>http://ikarishinjieva.github.io/post/2013-03-31-java-method-passing</link>
+      <pubDate>Sun, 31 Mar 2013 23:22:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-03-31-java-method-passing</guid>
+      <description>&lt;p&gt;一段时间没更新过blog,因为花了些时间在读lisp的入门,还将继续一段时间&lt;/p&gt;
+
+&lt;p&gt;先庆祝下自己25岁,可以正式对外宣称&amp;rdquo;我写了半辈子程序&amp;rdquo;&lt;/p&gt;
+
+&lt;p&gt;读lisp的入门时,有一个java的对比例子觉得很有意思(虽然事后想想也就那么回事)&amp;hellip;&lt;/p&gt;
+
+&lt;p&gt;简单的说,一个call传递给object(根据运行时的类型找到需要处理这个call的类),并找到对应的方法(根据call参数的编译时类型,找到需要处理这个call的函数),并执行&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;public class A {
+    public void foo(A a) {
+        System.out.println(&amp;quot;A/A&amp;quot;);
+    }
+
+    public void foo(B b) {
+        System.out.println(&amp;quot;A/B&amp;quot;);
+    }
+}
+
+public class B extends A {
+    public void foo(A a) {
+        System.out.println(&amp;quot;B/A&amp;quot;);
+    }
+
+    public void foo(B b) {
+        System.out.println(&amp;quot;B/B&amp;quot;);
+    }
+}
+
+public class C {
+    public static void main(String[] params) {
+//        A obj = new A();
+        A obj = new B();
+        obj.foo(obj);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;运行结果是&amp;rdquo;B/A&amp;rdquo;,B这个类是根据运行类型找到的,foo(A)这个方法是根据编译类型找到的。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>org.ow2.asm 通过类.class产生asm java代码</title>
+      <link>http://ikarishinjieva.github.io/post/2013-01-29-generate-asm-java-from-classfile</link>
+      <pubDate>Tue, 29 Jan 2013 23:00:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-01-29-generate-asm-java-from-classfile</guid>
+      <description>&lt;p&gt;尝试给&lt;a href=&#34;https://github.com/taobao/TProfiler&#34;&gt;TProfiler&lt;/a&gt;写一些单元测试。难点是如何对byte code injection产生测试夹具。理想的状况是产生一些class byte code，通过transformer，将生成的class载入并测试行为。第一步产生class byte code的代码可以通过asm提供的工具生成:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;java -classpath asm-all-4.1.jar org.objectweb.asm.util.ASMifier org/domain/package/YourClass.class
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;一些参考：
+&lt;a href=&#34;http://asm.ow2.org/doc/faq.html&#34;&gt;ASM的FAQ&lt;/a&gt;，里面的干货很多&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Tcp on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/tcp/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Wed, 08 Jan 2014 23:04:00 UTC</updated>
+    
+    <item>
+      <title>jruby中tcp阻塞时Timeout::timeout失效</title>
+      <link>http://ikarishinjieva.github.io/post/2014-01-08-jruby-bug-tcp-timeout</link>
+      <pubDate>Wed, 08 Jan 2014 23:04:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-01-08-jruby-bug-tcp-timeout</guid>
+      <description>
+
+&lt;h2 id=&#34;toc_0&#34;&gt;问题场景&lt;/h2&gt;
+
+&lt;p&gt;首先有一台tcp server, 模拟一个黑洞&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;require &#39;socket&#39;
+
+tcp_server = TCPServer.new(&amp;quot;0.0.0.0&amp;quot;, 6666)
+
+loop do
+     socket = tcp_server.accept
+     puts &#39;got conn&#39;]
+     #blackhole
+end
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;然后发起一个connection, 从server接受消息(很显然会阻塞在recv上), 并用&lt;code&gt;Timeout::timeout&lt;/code&gt;设置一个超时时间&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;require &amp;quot;socket&amp;quot;
+require &amp;quot;timeout&amp;quot;
+
+sock = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM, 0)
+addr = Socket.sockaddr_in(6666, &amp;quot;127.0.0.1&amp;quot;)
+sock.connect(addr)
+
+Timeout::timeout(5) {
+     sock.recv(1)
+} 
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;上面这个场景如果在ruby上跑,5秒后会超时,但如果使用jruby(1.7.6)就会一直处于阻塞&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;解决方案&lt;/h2&gt;
+
+&lt;p&gt;使用非阻塞&lt;code&gt;recv&lt;/code&gt;,可以在jruby上正常运行&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;require &amp;quot;socket&amp;quot;
+require &amp;quot;timeout&amp;quot;
+
+sock = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM, 0)
+addr = Socket.sockaddr_in(6666, &amp;quot;127.0.0.1&amp;quot;)
+sock.connect(addr)
+
+Timeout::timeout(5) {
+    begin
+        sock.recv_nonblock(1)
+    rescue IO::WaitReadable
+        IO.select([sock],nil,nil,5)
+        retry
+    end
+} 
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;猜测&lt;/h2&gt;
+
+&lt;p&gt;查看一下ruby &lt;code&gt;timeout.rb&lt;/code&gt;的源码&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;  begin
+    x = Thread.current
+    y = Thread.start {
+      begin
+        sleep sec
+      rescue =&amp;gt; e
+        x.raise e
+      else
+        x.raise exception, &amp;quot;execution expired&amp;quot;
+      end
+    }
+    return yield(sec)
+  ensure
+    if y
+      y.kill
+      y.join # make sure y is dead.
+    end
+  end
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;大概看到timeout是起了一个计时线程,超时时向主线程发起exception&lt;/p&gt;
+
+&lt;p&gt;猜测是因为jvm的线程模型导致exception不能向阻塞线程提交,但有待验证&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

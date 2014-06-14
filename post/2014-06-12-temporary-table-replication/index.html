@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> 测试Mysql临时表的复制 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>测试Mysql临时表的复制</h1>
+  <span class="post-date">Thu, Jun 12, 2014      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/mysql">mysql</a> </li>
+      
+        <li><a href="tags/replication">replication</a> </li>
+      
+        <li><a href="tags/temporary-table">temporary table</a> </li>
+      
+    </ul></span>
+      
+
+<p>测试一下Mysql 5.6.17对临时表的复制</p>
+
+<h2 id="toc_0">参考资料</h2>
+
+<ol>
+<li>Percona这篇08年的blog <a href="http://www.mysqlperformanceblog.com/2008/05/26/mysql-temporary-tables-safe-for-statement-based-replication/">Can MySQL temporary tables be made safe for statement-based replication?</a>, 是对于Mysql 5.1这方面的测试. 但根据对Mysql 5.6的相关测试, 其结论已经不适用. 其方法可供参考</li>
+
+<li><p>Mysql Manual 对于临时表复制的<a href="http://dev.mysql.com/doc/refman/5.6/en/replication-features-temptables.html">讨论</a>, 其中一些重要的描述列在下面:</p></li>
+
+<li><p>Safe slave shutdown when using temporary tables</p></li>
+
+<li><p>By default, all temporary tables are replicated; this happens whether or not there are any matching <code>--replicate-do-db</code>, <code>--replicate-do-table</code>, or <code>--replicate-wild-do-table</code> options in effect</p></li>
+
+<li><p>the <code>--replicate-ignore-table</code> and <code>--replicate-wild-ignore-table</code> options are honored for temporary tables</p></li>
+</ol>
+
+<h2 id="toc_1">概述</h2>
+
+<p>总共做了两个测试:</p>
+
+<ol>
+<li>Mysql Manual中&rdquo;Safe slave shutdown when using temporary tables&rdquo;一节, 验证为何需要如此安全关闭slave</li>
+<li>验证在复制临时表时, master意外crash, 是否会造成slave上的资源泄露</li>
+</ol>
+
+<p>每个测试后都有结论</p>
+
+<h2 id="toc_2">测试一</h2>
+
+<p>针对Mysql Manual提到的&rdquo;Safe slave shutdown when using temporary tables&rdquo;, 重现一下:</p>
+
+<pre><code>#准备环境, 断开复制
+mysql-master&gt; select @@binlog_format;
++-----------------+
+| @@binlog_format |
++-----------------+
+| MIXED           |
++-----------------+
+1 row in set (0.02 sec)
+
+mysql-slave&gt; stop slave;
+Query OK, 0 rows affected (0.03 sec)
+</code></pre>
+
+<pre><code>#在master上构造使用临时表的两个transaction
+mysql-master&gt; flush logs;
+Query OK, 0 rows affected (0.02 sec)
+
+mysql-master&gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-master&gt; create temporary table test.t(t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql-master&gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-master&gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-master&gt; insert into test.a select t from test.t;
+Query OK, 0 rows affected (0.00 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql-master&gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+</code></pre>
+
+<pre><code>#查看master的binlog
+mysql-master&gt; show binlog events in &quot;mysql-bin.000036&quot; \G
+*************************** 1. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 4
+ Event_type: Format_desc
+  Server_id: 1
+End_log_pos: 120
+       Info: Server ver: 5.6.17-debug-log, Binlog ver: 4
+*************************** 2. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 120
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 195
+       Info: BEGIN
+*************************** 3. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 195
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 301
+       Info: create temporary table test.t(t int)
+*************************** 4. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 301
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 370
+       Info: COMMIT
+*************************** 5. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 370
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 445
+       Info: BEGIN
+*************************** 6. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 445
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 554
+       Info: insert into test.a select t from test.t
+*************************** 7. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 554
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 623
+       Info: COMMIT
+7 rows in set (0.00 sec)
+</code></pre>
+
+<pre><code>#开启复制,让复制在两个transaction之间中断
+
+mysql-slave&gt; start slave until master_log_file='mysql-bin.000036', master_log_pos=370;
+Query OK, 0 rows affected, 1 warning (0.02 sec)
+
+mysql-slave&gt; show slave status\G
+*************************** 1. row ***************************
+               Slave_IO_State: Waiting for master to send event
+...
+              Master_Log_File: mysql-bin.000036
+          Read_Master_Log_Pos: 623
+...
+        Relay_Master_Log_File: mysql-bin.000036
+             Slave_IO_Running: Yes
+            Slave_SQL_Running: No
+...
+          Exec_Master_Log_Pos: 370
+...
+1 row in set (0.00 sec)
+
+</code></pre>
+
+<pre><code>#查看slave正在使用的临时表, 并重启slave
+
+mysql-slave&gt; show status like '%temp%';                      
++------------------------+-------+
+| Variable_name          | Value |
++------------------------+-------+
+| Slave_open_temp_tables | 1     |
++------------------------+-------+
+1 row in set (0.01 sec)
+
+slave&gt; service mysqld restart
+</code></pre>
+
+<pre><code>#验证slave status
+
+
+mysql-slave&gt; show slave status\G
+*************************** 1. row ***************************
+...
+              Master_Log_File: mysql-bin.000036
+          Read_Master_Log_Pos: 623
+...
+        Relay_Master_Log_File: mysql-bin.000036
+             Slave_IO_Running: Yes
+            Slave_SQL_Running: No
+...
+                   Last_Errno: 1146
+                   Last_Error: Error 'Table 'test.t' doesn't exist' on query. Default database: ''. Query: 'insert into test.a select t from test.t'
+...
+          Exec_Master_Log_Pos: 370
+...
+               Last_SQL_Errno: 1146
+               Last_SQL_Error: Error 'Table 'test.t' doesn't exist' on query. Default database: ''. Query: 'insert into test.a select t from test.t'
+  Replicate_Ignore_Server_Ids:
+...
+1 row in set (0.00 sec)
+
+</code></pre>
+
+<p><strong>结论</strong>: 使用临时表时, slave并不保证crash-safe, 而且若在连续的transaction中复用同一个临时表, 完全没办法安全修复.</p>
+
+<h2 id="toc_3">测试2</h2>
+
+<p>对于一个<code>create temporary table</code>, 已知<code>drop temporary table</code>会在session结束时写进binlog. 那么如果master意外退出, 是不是会对slave造成资源泄露? 比如不释放文件句柄</p>
+
+<pre><code>#准备master环境
+mysql-master&gt; select @@binlog_format;
++-----------------+
+| @@binlog_format |
++-----------------+
+| MIXED           |
++-----------------+
+1 row in set (0.00 sec)
+
+mysql-master&gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+</code></pre>
+
+<pre><code>#检查slave上的资源
+mysql-slave&gt; show status like '%open%';
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 6     |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 164   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 0     |
+...
++----------------------------+-------+
+14 rows in set (0.00 sec)
+</code></pre>
+
+<pre><code>#在master上创建5张临时表
+mysql-master&gt; create temporary table test.t1 (t int);create temporary table test.t2 (t int);create temporary table test.t3 (t int);create temporary table test.t4 (t int);create temporary table test.t5 (t int);
+Query OK, 0 rows affected (0.02 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+
+</code></pre>
+
+<pre><code>#检查slave上的资源
+mysql-slave&gt; show status like '%open%';
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 11    |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 179   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 5     |
+...
++----------------------------+-------+
+14 rows in set (0.00 sec)
+</code></pre>
+
+<pre><code>#引发master故障, 重启master库
+master&gt; pkill -9 mysqld
+master&gt; /opt/mysql/bin/mysqld_safe &amp;
+</code></pre>
+
+<pre><code>#重启slave复制, 检查slave上的资源
+
+mysql-slave&gt; stop slave io_thread;
+Query OK, 0 rows affected (0.02 sec)
+
+mysql-slave&gt; start slave io_thread;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-slave&gt; show status like '%open%';
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 6     |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 209   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 5     |
+...
++----------------------------+-------+
+14 rows in set (0.00 sec)
+</code></pre>
+
+<pre><code>#在master上再次创建5张临时表, 检查slave上的资源
+mysql-master&gt; create temporary table test.t1 (t int);create temporary table test.t2 (t int);create temporary table test.t3 (t int);create temporary table test.t4 (t int);create temporary table test.t5 (t int);
+Query OK, 0 rows affected (0.09 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.02 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+
+mysql-slave&gt; show status like '%open%';
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 11    |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 224   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 10    |
+...
++----------------------------+-------+
+</code></pre>
+
+<p><strong>结论</strong>: 复制临时表时,slave上消耗的资源, <code>Innodb_num_open_files</code>会及时回收,也就是说实际消耗的系统资源被及时回收. 但<code>Slave_open_temp_tables</code>会虚高不下,按照Mysql Manual中&rdquo;Safe slave shutdown when using temporary tables&rdquo;的叙述, 用<code>Slave_open_temp_tables</code>来判断关闭server的时机时, 会出现判断失误.</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

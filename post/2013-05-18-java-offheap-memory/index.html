@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> Java off-heap的一些参考 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>Java off-heap的一些参考</h1>
+  <span class="post-date">Sat, May 18, 2013      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/java">java</a> </li>
+      
+        <li><a href="tags/memory">memory</a> </li>
+      
+        <li><a href="tags/gc">gc</a> </li>
+      
+    </ul></span>
+      <p>读了Hazelcast的文档，很有意思的部分是&rdquo;Elastic Memory&rdquo;，为了减少GC，用到了java off-heap(off-heap允许Java直接操作内存空间, 类似于C的malloc和free)。之前孤陋寡闻，记录一些off-heap的参考。</p>
+
+<p>.1.做了以下对比试验，来对比Heap和Non-heap</p>
+
+<pre><code>public class HeapAllocation {
+    public static void main(String[] args) {
+        while (true) {
+            Integer[] a = new Integer[1000000];
+        }
+    }
+}
+</code></pre>
+
+<pre><code>import java.lang.reflect.Field;
+
+public class OffHeapAllocation {
+
+    private static Unsafe unsafe;
+
+    static {
+        try {
+            Field field = Unsafe.class.getDeclaredField(&quot;theUnsafe&quot;);
+            field.setAccessible(true);
+            unsafe = (Unsafe)field.get(null);
+        } catch(Exception e) {
+        }
+    }
+
+    public static void main(String[] args) {
+        while (true) {
+            long addr = unsafe.allocateMemory(8 * 1000000);
+            unsafe.freeMemory(addr);
+        }
+    }
+}
+</code></pre>
+
+<p>Heap GC的测试结果：
+<img src="../../blog-img/2013-05-18-java-offheap-memory-0.png" alt="Heap GC的测试结果" title="Heap GC的测试结果" />
+</p>
+
+<p>Off-heap GC的测试结果：
+<img src="../../blog-img/2013-05-18-java-offheap-memory-1.png" alt="Off-heap GC的测试结果" title="Off-heap GC的测试结果" />
+</p>
+
+<p>尽管这种测试没啥意义，只能给个直观感受，还是可以看到Heap GC Pause Time还是很多的。</p>
+
+<p>.2.<a href="http://mentablog.soliveirajr.com/2012/11/which-one-is-faster-java-heap-or-native-memory">这篇文章</a> 对off-heap的性能做了全面的对比。</p>
+
+<p>结论是heap access要快于off-heap，但off-heap在躲开GC pause和开大内存的时候明显优秀。</p>
+
+<p>有趣的是在评论一楼Peter Lawrey指出JIT会影响这个测试，于是作者重做测试以证明JIT不影响结论。</p>
+
+<p>.3.<a href="http://mentablog.soliveirajr.com/2012/11/real-time-java-programming-without-gc">这篇文章</a> 讨论了如何让Java避开GC并提供了memory的测试类GCUtils。</p>
+
+<p>.4.<a href="http://stackoverflow.com/questions/12246533/where-to-find-the-evidence-of-how-to-calculate-the-size-of-a-java-object">在这里</a> Peter Lawrey谈到了如何测量一个Java对象的大小和TLAB对测量的影响。仅供参考。</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

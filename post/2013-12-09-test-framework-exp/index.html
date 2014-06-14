@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> 关于DEV测试的一些经验总结 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>关于DEV测试的一些经验总结</h1>
+  <span class="post-date">Mon, Dec 9, 2013      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/test">test</a> </li>
+      
+    </ul></span>
+      <p>已经是第三遍重写项目主代码了，这几天用主代码和测试框架互相补充。总结下经验值，以期升级</p>
+
+<hr />
+
+<p>关于测试框架，重写了几遍仍然保留下来的功重要能是：</p>
+
+<p>.0. 插桩代码，后面的功能也都依赖插桩。不在主代码中插桩，测试基本靠拜神；</p>
+
+<p>.1. 条件池，根据条件池，代码才能沿着需要的分支进行；</p>
+
+<p>.2. 签到点（checkpoint），代码要能根据测试要求停得下来，等待状态，之后跑得起来；</p>
+
+<p>.3. 外缘测试。比起直接测试变量，还是分析log比较容易维护</p>
+
+<p>测试的难点是：</p>
+
+<p>.0. 资源回收。要连续跑测试，资源回收是说说容易的事。tcp server关了，listener停了，关闭的那些connection会不会瞬时占用临时端口；如果某一个connection正在申请二步锁，测试停止时远端锁失败，近端锁如果不释放会不会影响之后的测试；如果系统会自动重启tcp server，tcp server是在测试关闭操作之前停还是之后停还是停两次。想想头就大了。</p>
+
+<p>.1. 想停都停不下来，万一断言失败，测试要能停下来。整个flow上都要处理停止中断，用“硬”中断很难掌握资源回收的状况；用“模拟”中断，所有等待/超时/重试的地方都要处理，逐级退栈。比起不测试的代码，主代码花在错误处理的代码量要大很多，但是值得。</p>
+
+<p>.2. 测试界限把握不易。测粗了没作用，测细了耗时间而且波动大。插桩的深度，模拟中断的层级，这些都要拿好轻重。否则代码已腐败。</p>
+
+<p>每次跑测试，比起旁边坐个QA的测试，更步步惊心。QA一天才跑十几个case，自动的话2-3分钟就跑十几个简化的case，出错的概率要大很多。</p>
+
+<p>最后反思一下，如果靠人肉测，&hellip;</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

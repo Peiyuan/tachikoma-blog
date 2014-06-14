@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> 对Memory Reordering Caught in the Act的学习 续 - 关于go的部分 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>对Memory Reordering Caught in the Act的学习 续 - 关于go的部分</h1>
+  <span class="post-date">Mon, Nov 11, 2013      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/memory">memory</a> </li>
+      
+        <li><a href="tags/go">go</a> </li>
+      
+    </ul></span>
+      
+
+<p>这篇主要解决<a href="http://ikarishinjieva.github.io/blog/blog/2013/11/07/study-memory-reorder/">上一篇</a>遗留下来的问题，问题的简要描述请参看<a href="http://stackoverflow.com/questions/19901615/why-go-doesnt-show-memory-reordering">我发在SO上的帖子</a></p>
+
+<p>主要的问题是用c++可以重现memory reordering，但go的程序没有重现</p>
+
+<p>主要的结论是写go的时候我忘记设置GOMAXPROC，在目前这个go版本(1.2 rc2)下，不设置GOMAXPROC goroutine不会并发的，自然也没法设置memory reordering</p>
+
+<p>此篇主要内容到此结束，以下是这两天的一些探索过程和技巧，觉得还是挺有意思的</p>
+
+<h2 id="toc_0">go tool生成的汇编码和真实的汇编码是有很大差距的</h2>
+
+<p>这个结论并不奇怪，但是差异的程度还是会影响诸如lock-free的代码的使用前提</p>
+
+<p>对以下代码做对比</p>
+
+<pre><code>x = 1
+r1 = y
+</code></pre>
+
+<p>使用<code>go tool 6g -S xxx.go</code>反编译后的代码</p>
+
+<pre><code>0246 (a.go:25) MOVQ    $1,x+0(SB)   //X=1
+0247 (a.go:26) MOVQ    y+0(SB),BX
+0248 (a.go:26) MOVQ    BX,r1+0(SB)  //r1=Y
+</code></pre>
+
+<p>而真实运行在cpu上的代码（<code>ndisasm -b 32 xxx</code>)为</p>
+
+<pre><code>000013EB  C70425787F170001  mov dword [0x177f78],0x1     //X=1
+         -000000
+000013F6  48                dec eax
+000013F7  8B1C25807F1700    mov ebx,[0x177f80]
+000013FE  48                dec eax
+000013FF  891C25687F1700    mov [0x177f68],ebx          //r1=Y
+00001406  48                dec eax
+</code></pre>
+
+<p>可以看到在访问共享内存的前后多出了<code>dec eax</code>作为margin，这个原因不明，也没有找到相应的资料</p>
+
+<p>但总的来说<code>ndisasm</code>产生的汇编代码更方便于对go行为的理解</p>
+
+<h2 id="toc_1">一个小技巧快速定位汇编码</h2>
+
+<p>我对intel指令集和go的编译器知之甚少，读起汇编码来颇为费劲。</p>
+
+<p>快速定位源码对应的汇编码的位置，比较方便的就是修改一个数值，比如x=1改为x=2，前后生成的汇编码diff一下，就可以大概确定位置了</p>
+
+<h2 id="toc_2">替换c++生成文件的指令</h2>
+
+<p>在探索过程中，我想做个对比实验来证明是否上面所说的<code>dec eax</code>引起了c++和go在memory reordering上的差异，于是就想将<code>dec eax</code>也加到c++的生成文件中，这样就可以对比效果</p>
+
+<p>碰到的问题是如果我直接将<code>asm volatile(&quot;dec %eax&quot;)</code>直接加到c++源码中，生成的汇编代码不是<code>48</code>，而是<code>FExxxx</code>。翻看<a href="http://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-vol-2a-manual.pdf">Intel® 64 and IA-32 Architectures
+Software Developer’s Manual</a>，可知<code>dec</code>有多种形式</p>
+
+<p>但是我不想研究为什么编译器会选择<code>FExxxx</code>而不是<code>48</code>，而是想尽快将c++生成的汇编代码形式做成和go一样。于是就有了下面的步骤：</p>
+
+<ol>
+<li><code>48</code>有两个字节，我也选取两个字节的op写在c++源码中，比如<code>asm volatile(&quot;cli&quot;)</code></li>
+<li>c++编译生成，然后用16进制编辑器将<code>cli</code>生成的两个字节换成<code>48</code>即可</li>
+</ol>
+
+<p>之所以选择替换是因为怕有checksum或者内存位置的偏移，我也不知道有还是没有&hellip;</p>
+
+<p>对比实验证明<code>dec eax</code>不是引起差异的原因</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

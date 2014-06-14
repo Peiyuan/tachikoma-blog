@@ -1,0 +1,458 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Concurrency on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/concurrency/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Thu, 14 Mar 2013 21:37:00 UTC</updated>
+    
+    <item>
+      <title>读写锁-读可重入</title>
+      <link>http://ikarishinjieva.github.io/post/2013-03-14-read-write-lock-read-reentrant</link>
+      <pubDate>Thu, 14 Mar 2013 21:37:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-03-14-read-write-lock-read-reentrant</guid>
+      <description>&lt;p&gt;发现&lt;a href=&#34;http://tutorials.jenkov.com/java-concurrency/read-write-locks.html&#34;&gt;这篇文献&lt;/a&gt;描写读写锁和可重入性非常具体。&lt;/p&gt;
+
+&lt;p&gt;尝试实现文章中的读可重入的读写锁：&lt;/p&gt;
+
+&lt;p&gt;考虑如何测试一个读可重入的读写锁, 由于读写锁的性质(可以同时存在多个读锁), 如果只是在线程A连续申请两个读锁, 就无法证明是锁的重入性发挥了作用。&lt;/p&gt;
+
+&lt;p&gt;测试思路是先在线程A申请读锁, 然后在线程B申请写锁, 若在线程C申请读锁, 此读锁应阻塞。而如果在线程A申请另一个读锁(前一个未释放), 线程A不应被阻塞。&lt;/p&gt;
+
+&lt;p&gt;测试代码(我的确用了Main来测试&amp;hellip;)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;public static void main(String[] args) throws InterruptedException {
+    final ReadWriteLockReadReentrant lock = new ReadWriteLockReadReentrant();
+
+    new Thread() {
+        @Override
+        public void run() {
+            try {
+                lock.lockRead();
+                System.out.println(&amp;quot;Reading&amp;quot;);
+                sleep(5000);
+                System.out.println(&amp;quot;Inner Reading&amp;quot;);
+                lock.lockRead();
+            } catch (InterruptedException e) {
+
+            } finally {
+                System.out.println(&amp;quot;Inner Reading End&amp;quot;);
+                lock.unlockRead();
+                System.out.println(&amp;quot;Reading End&amp;quot;);
+                lock.unlockRead();
+            }
+        }
+    }.start();
+    Thread.sleep(500);
+    
+    new Thread() {
+        @Override
+        public void run() {
+            try {
+                System.out.println(&amp;quot;Request write lock&amp;quot;);
+                lock.lockWrite();
+                System.out.println(&amp;quot;Writing&amp;quot;);
+            } catch (InterruptedException e) {
+
+            } finally {
+                System.out.println(&amp;quot;Writing End&amp;quot;);
+                lock.unlockWrite();
+            }
+        }
+    }.start();
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;结果应当是：Reading(线程A),Request write lock(线程B),Inner Reading(未阻塞),Inner Reading End,Reading End,Writing,Writing End&lt;/p&gt;
+
+&lt;p&gt;读重入的读写锁(基本是抄上面文献的代码~)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import java.util.HashMap;
+import java.util.Map;
+
+public class ReadWriteLockReadReentrant {
+    private boolean hasWriter = false;
+    private int writeRequests = 0;
+    private Map&amp;lt;Thread, Integer&amp;gt; readers = new HashMap&amp;lt;Thread, Integer&amp;gt;();
+
+    public synchronized void lockRead() throws InterruptedException {
+        Thread current = Thread.currentThread();
+        while (!couldRead(current)) {
+            wait();
+        }
+        readers.put(current, getReaders(current) + 1);
+    }
+
+    private int getReaders(Thread current) {
+        if (!readers.containsKey(current)) {
+            return 0;
+        }
+        return readers.get(current);
+    }
+
+    private boolean couldRead(Thread current) {
+        if (hasWriter) {
+            return false;
+        }
+        if (readers.containsKey(current)) {
+            return true; //important
+        }
+        if (writeRequests &amp;gt; 0) {
+            return false;
+        }
+        return true;
+    }
+
+    public synchronized void unlockRead() {
+        Thread current = Thread.currentThread();
+        setReaders(current, getReaders(current) - 1);
+        notifyAll();
+    }
+
+    private void setReaders(Thread current, Integer now) {
+        if (now == 0) {
+            readers.remove(current);
+        } else {
+            readers.put(current, now);
+        }
+    }
+
+    public synchronized void lockWrite() throws InterruptedException {
+        writeRequests++;
+        while (readers.size() &amp;gt; 0) {
+            wait();
+        }
+        writeRequests--;
+        hasWriter = true;
+    }
+
+
+    public synchronized void unlockWrite() {
+        hasWriter = false;
+        notifyAll();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;需要注意的是标记&amp;rdquo;//important&amp;rdquo;的那行，如果这个判断和writeRequest的判断互换位置，线程B申请写锁被阻塞时，线程A无法申请到第二个读锁。一切就悲剧了。&lt;/p&gt;
+
+&lt;p&gt;标记为&amp;rdquo;//important&amp;rdquo;的判断和writeRequest的判断互换位置&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;private boolean couldRead(Thread current) {
+    if (hasWriter) {
+        return false;
+    }
+    if (writeRequests &amp;gt; 0) {
+        return false;
+    }
+    if (readers.containsKey(current)) {
+        return true; //important
+    }
+    return true;
+}
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>可重入Lock</title>
+      <link>http://ikarishinjieva.github.io/post/2013-03-13-reentrant-lock</link>
+      <pubDate>Wed, 13 Mar 2013 23:01:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-03-13-reentrant-lock</guid>
+      <description>&lt;p&gt;参考：&lt;a href=&#34;http://book.douban.com/subject/10484692/&#34;&gt;Java并发编程实践&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;参考书里2.3.2对锁的重入性一句话搞定：“获取所得粒度是&amp;rdquo;线程&amp;rdquo;，而不是&amp;rdquo;调用&amp;rdquo;”&lt;/p&gt;
+
+&lt;p&gt;下面的代码验证内置锁(synchronize)和Lock(ReentrantLock)的重入性&lt;/p&gt;
+
+&lt;p&gt;内置锁可重入&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;public class Reentrant {
+    public void method1() {
+        synchronized (Reentrant.class) {
+            System.out.println(&amp;quot;method1 run&amp;quot;);
+            method2();
+        }
+    }
+
+    public void method2() {
+        synchronized (Reentrant.class) {
+            System.out.println(&amp;quot;method2 run in method1&amp;quot;);
+        }
+    }
+
+    public static void main(String[] args) {
+        new Reentrant().method1();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Lock对象可重入&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Reentrant2 {
+    private Lock lock = new ReentrantLock();
+
+    public void method1() {
+        lock.lock();
+        try {
+            System.out.println(&amp;quot;method1 run&amp;quot;);
+            method2();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void method2() {
+        lock.lock();
+        try {
+            System.out.println(&amp;quot;method2 run in method1&amp;quot;);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public static void main(String[] args) {
+        new Reentrant2().method1();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在同一线程里，method1调用持同样锁的method2，不会等锁。这就是锁的&amp;rdquo;重入&amp;rdquo;。&lt;/p&gt;
+
+&lt;p&gt;不同线程里锁不可重入&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Reentrant3 {
+    private static Lock lock = new ReentrantLock();
+
+    private static class T1 extends Thread {
+        @Override
+        public void run() {
+            System.out.println(&amp;quot;Thread 1 start&amp;quot;);
+            lock.lock();
+            try {
+                Thread.sleep(10000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                lock.unlock();
+            }
+            System.out.println(&amp;quot;Thread 1 end&amp;quot;);
+        }
+    }
+
+    private static class T2 extends Thread {
+        @Override
+        public void run() {
+            System.out.println(&amp;quot;Thread 2 start&amp;quot;);
+            lock.lock();
+            lock.unlock();
+            System.out.println(&amp;quot;Thread 2 end&amp;quot;);
+        }
+    }
+
+
+    public static void main(String[] args) {
+        new T1().start();
+        Thread.sleep(100);
+        new T2().start();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;不同线程可以看到T2一定会等到T1释放锁之后。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Thread Notify 和 NotifyAll</title>
+      <link>http://ikarishinjieva.github.io/post/2013-03-13-notify-and-notify-all</link>
+      <pubDate>Wed, 13 Mar 2013 21:47:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-03-13-notify-and-notify-all</guid>
+      <description>&lt;p&gt;参考：&lt;a href=&#34;http://blog.csdn.net/iceman1952/article/details/2159812&#34;&gt;http://blog.csdn.net/iceman1952/article/details/2159812&lt;/a&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;public class Notify {
+    private static class T extends Thread {
+        public T(String s) {
+            super(s);
+        }
+
+        @Override
+        public void run() {
+            System.out.println(String.format(&amp;quot;%s run.&amp;quot;, this.getName()));
+            synchronized (Notify.class) {
+                try {
+                    Notify.class.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            System.out.println(String.format(&amp;quot;%s done.&amp;quot;, this.getName()));
+        }
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        new T(&amp;quot;thread 1&amp;quot;).start();
+        new T(&amp;quot;thread 2&amp;quot;).start();
+        Thread.sleep(1000);
+        System.out.println(&amp;quot;notify&amp;quot;);
+        synchronized (Notify.class) {
+            Notify.class.notify();
+            //Notify.class.notifyAll(); //alternative
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Notify版本主线程是不会退出的，因为释放了一个wait，另一个就会等到天荒地老。&lt;/p&gt;
+
+&lt;p&gt;NotifyAll主线程会退出。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Thread wait 和 sleep</title>
+      <link>http://ikarishinjieva.github.io/post/2013-03-11-thread-wait-sleep</link>
+      <pubDate>Mon, 11 Mar 2013 22:32:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-03-11-thread-wait-sleep</guid>
+      <description>&lt;p&gt;ifeve上发现几个多线程的&lt;a href=&#34;http://ifeve.com/javaconcurrency-interview-questions-base/&#34;&gt;基础问题&lt;/a&gt;。我一直不写多线程（我这两年到底都写了些什么~），重头学起。&lt;/p&gt;
+
+&lt;p&gt;sleep和wait的区别。sleep让出cpu，等一段时间，重新进入竞争，不释放锁。wait等一个状态notify，才重新进入竞争，但释放锁。&lt;/p&gt;
+
+&lt;p&gt;下面代码说明是否释放锁的区别：&lt;/p&gt;
+
+&lt;p&gt;sleep不会释放锁&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+public class MultiThread {
+    public static class T1 extends Thread {
+        @Override
+        public void run() {
+            synchronized (MultiThread.class) {
+                System.out.println(&amp;quot;T1 run&amp;quot;);
+                System.out.println(&amp;quot;T1 sleep&amp;quot;);
+                try {
+                    sleep(10000);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                System.out.println(&amp;quot;T1 wake up&amp;quot;);
+            }
+        }
+    }
+    
+    public static class T2 extends Thread {
+        @Override
+        public void run() {
+            synchronized (MultiThread.class) {
+                System.out.println(&amp;quot;T2 run&amp;quot;);
+            }
+        }
+    }
+
+    public static void main(final String[] args) throws InterruptedException {
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
+        executorService.execute(new T1());
+        Thread.sleep(1000);
+        executorService.execute(new T2());
+        
+        //dispose
+        executorService.awaitTermination(1, TimeUnit.HOURS);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;wait会释放锁&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+public class MultiThread2 {
+    public static class T1 extends Thread {
+        @Override
+        public void run() {
+            synchronized (MultiThread2.class) {
+                System.out.println(&amp;quot;T1 run&amp;quot;);
+                System.out.println(&amp;quot;T1 wait&amp;quot;);
+                try {
+                    MultiThread2.class.wait();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                System.out.println(&amp;quot;T1 wake up&amp;quot;);
+            }
+        }
+    }
+    
+    public static class T2 extends Thread {
+        @Override
+        public void run() {
+            synchronized (MultiThread2.class) {
+                System.out.println(&amp;quot;T2 run&amp;quot;);
+            }
+        }
+    }
+
+    public static void main(final String[] args) throws InterruptedException {
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
+        executorService.execute(new T1());
+        Thread.sleep(1000);
+        executorService.execute(new T2());
+        
+        //dispose
+        Thread.sleep(10000);
+        synchronized (MultiThread2.class) {
+            MultiThread2.class.notify();
+        }
+        executorService.awaitTermination(1, TimeUnit.HOURS);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;sleep的执行结果是T1 run, T1 sleep, T1 wake up, T2 run&lt;/p&gt;
+
+&lt;p&gt;wait的执行结果是T1 run, T1 wait, T2 run (此处锁被释放, T2获得锁), T1 wake up&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>False Sharing 阅读</title>
+      <link>http://ikarishinjieva.github.io/post/2013-03-10-false-sharing-0</link>
+      <pubDate>Sun, 10 Mar 2013 23:40:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-03-10-false-sharing-0</guid>
+      <description>&lt;p&gt;应该说&lt;a href=&#34;http://ifeve.com/disruptor-cacheline-padding/&#34;&gt;这篇&lt;/a&gt;和&lt;a href=&#34;http://ifeve.com/false-sharing/&#34;&gt;这篇文章&lt;/a&gt;是最近读的最有意思的一篇文章，关于多线程访问时，内存预读到寄存器的内容产生的数据竞争(false sharing)对性能的影响(我已经不知道我在说什么了，文章里解释的很清楚)。&lt;/p&gt;
+
+&lt;p&gt;重做了第二篇里的试验，发现六个padding不够，需要七个padding(p7)才能有两倍的性能差异。(没有文献里说的那么离谱，测试环境的差异吧)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;public long p1, p2, p3, p4, p5, p6; // comment out
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;del&gt;TODO：了解第七个padding的来源&lt;/del&gt;&lt;/p&gt;
+
+&lt;p&gt;看了第二篇文章的&lt;a href=&#34;http://ifeve.com/false-shareing-java-7-cn/&#34;&gt;更新篇&lt;/a&gt;, 用这个稳定的代码跑测试，就不会有之前p7的问题。（可能是之前p1-p6被优化掉了？不解。）&lt;/p&gt;
+
+&lt;p&gt;在公司八核的机器上也测过，性能提升也就在2-4倍左右。没有那么夸张。&lt;/p&gt;
+
+&lt;p&gt;原理基本清楚，对不同平台间的差异完全没想法。不做深入了解。&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

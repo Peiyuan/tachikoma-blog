@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> 实验：Mysql master-slave-standby将source从master切换到standby &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>实验：Mysql master-slave-standby将source从master切换到standby</h1>
+  <span class="post-date">Wed, May 15, 2013      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/mysql">mysql</a> </li>
+      
+        <li><a href="tags/replication">replication</a> </li>
+      
+    </ul></span>
+      <p>尝试了&lt;Mysql High Availability&gt;第四章热备份一节的实验,记录步骤.</p>
+
+<p>先统一原语,master/slave/standby表示三台机器名,source/target代表replication关系的两端（不适用master/slave用以和机器名区分）.&ldquo;master(3)&ldquo;表示master机器的db里有三条数据1,2,3.</p>
+
+<p>实验开始.</p>
+
+<p>.1. 初始状态是存在master-&gt;slave, master-&gt;standby的replication
+.2. standby在切换成source时,需要有bin-log和replication user. 在此重新设置master-&gt;standby的replication, 让standby满足要求.</p>
+
+<p>忽略replication user的部分.</p>
+
+<p>bin-log的部分在my.cnf里要设置log-bin和log-slave-updates(默认情况下,master-&gt;standby的replication不会写standby的bin-log,需开始standby的log-slave-updates才会写).</p>
+
+<pre><code>server-id               = 3
+log_bin                 = /var/log/mysql/mysql-bin.log
+...
+relay-log-index         = /var/log/mysql/slave-relay-bin.index
+relay-log               = /var/log/mysql/slave-relay-bin
+log-slave-updates
+</code></pre>
+
+<p>.3. 测试一下standby binlog设置成功。可以在master插入一条数据，在standby查看</p>
+
+<pre><code>standby&gt; show binlog events;
++------------------+------+-------------+-----------+-------------+------------------------------------------------------------------------+
+| Log_name         | Pos  | Event_type  | Server_id | End_log_pos | Info                                                                   |
++------------------+------+-------------+-----------+-------------+------------------------------------------------------------------------+
+| mysql-bin.000001 |    4 | Format_desc |         3 |         107 | Server ver: 5.5.31-0ubuntu0.12.04.1-log, Binlog ver: 4                 |
+| mysql-bin.000001 |  107 | Query       |         1 |         166 | BEGIN                                                                  |
+| mysql-bin.000001 |  166 | Query       |         1 |         257 | use `tac`; insert into test values(8889)                               |
+| mysql-bin.000001 |  257 | Xid         |         1 |         284 | COMMIT /* xid=111 */    
+...
+</code></pre>
+
+<p>.4. 将replication调整至状态master(3),standby(2),slave(1). 人工造成各db的状态不一致</p>
+
+<pre><code>master&gt; insert into test values(1);
+slave&gt; stop slave;
+master&gt; insert into test values(2);
+standby&gt; stop slave;
+master&gt; insert into test values(3);
+</code></pre>
+
+<p>.5. 想象此时master挂掉,开始将source从master切换成standby</p>
+
+<p>.6. 在建立standby-&gt;slave的replication之前，需要将standby和slave数据同步(此时slave落后于standby)。</p>
+
+<pre><code>-- 先查看standby从master拿了多少数据
+standby&gt; show slave status \G
+*************************** 1. row ***************************
+...
+        Master_Log_File: master-bin.000023
+...
+        Exec_Master_Log_Pos: 1391
+          
+-- 让slave从master上同步到跟standby同样的位置
+slave&gt; start slave until master_log_file = 'master-bin.000023', master_log_pos = 1391;
+</code></pre>
+
+<p>有意思的是此处用了master(其实我们假设master已经坏了&hellip;)。</p>
+
+<p>.7. 此时可以讲slave的source从master切换到standby. 一个问题就是standby-&gt;slave的开始位置可能是和master-&gt;slave不同</p>
+
+<pre><code>-- 查看standby binlog的当前位置
+mysql&gt; show master status \G
+*************************** 1. row ***************************
+    File: mysql-bin.000001 
+    Position: 796
+    Binlog_Do_DB:
+    Binlog_Ignore_DB:
+-- 注意与master上的文件名和位置都不同
+
+-- 切换slave的source
+slave&gt; change master to 
+              master_host = '192.168.50.4', 
+              master_port = 3306, 
+              master_user = 'repl', 
+              master_password = 'repl', 
+              master_log_file = 'mysql-bin.000001', 
+              master_log_pos = 796;
+</code></pre>
+
+<p>.8. 测试一下standby-&gt;slave replication.</p>
+
+<p>总的思路就是讲master(3),standby(2),slave(1)同步成master(3),standby(2),slave(2),然后将master-&gt;slave切换成standby-&gt;slave.</p>
+
+<p>遗留了两个问题,其一是slave和standby同步时使用了&rdquo;坏掉&rdquo;的master;其二是master超前了standby和slave, 也就是standby-&gt;slave丢失了master的超前数据。留待慢慢学习。</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> Mysql rpl_slave.cc:handle_slave_io 源码的一些个人分析 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>Mysql rpl_slave.cc:handle_slave_io 源码的一些个人分析</h1>
+  <span class="post-date">Sun, Oct 20, 2013      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/mysql">mysql</a> </li>
+      
+        <li><a href="tags/replication">replication</a> </li>
+      
+    </ul></span>
+      
+
+<p>读了rpl_slave.cc:handle_slave_io的源码（Mysql 5.6.11），总结一下</p>
+
+<h2 id="toc_0">函数概述</h2>
+
+<p>handle_slave_io是slave io_thread的主函数，函数逻辑入口为rpl_slave.cc:start_slave_threads</p>
+
+<h2 id="toc_1">主体结构</h2>
+
+<pre><code>handle_slave_io(master_info) {
+     3955 bla bla…
+     4016 fire HOOK binlog_relay_io.thread_start
+     4032 与master建立连接
+    (4047 设置max_packet_size)
+     4073 get_master_version_and_clock,
+          在master上：
+          通过SELECT UNIX_TIMESTAMP()获取server timestamp
+          通过SHOW VARIABLES LIKE 'SERVER_ID'获取server id
+          SET @master_heartbeat_period= ?
+          SET @master_binlog_checksum= @@global.binlog_checksum
+          SELECT @master_binlog_checksum获取master binlog checksum
+          SELECT @@GLOBAL.GTID_MODE
+     4075 get_master_uuid
+          在master上“SHOW VARIABLES LIKE 'SERVER_UUID'”
+     4077 io_thread_init_commands
+          在master上“SET @slave_uuid= '%s'”
+     4106 register_slave_on_master
+          向master发送COM_REGISTER_SLAVE
+     4133 while (!io_slave_killed(thd,mi))
+     4134 {
+     4136      request_dump
+               向master发送COM_BINLOG_DUMP_GTID/COM_BINLOG_DUMP
+     4159      while (!io_slave_killed(thd,mi))
+     4160      {
+     4169           read_event，此为阻塞方法，会阻塞等待有新数据包传入
+     4184          {
+                         一些包错误的处理，包括packet too large / out of resource等
+     4213          }
+     4219          fire HOOK binlog_relay_io.after_read_event
+     4232          queue_event，将event放入relay log写buf
+     4240          fire HOOK binlog_relay_io.after_queue_event
+     4250          flush_master_info，将master_info和relay log刷到disk上
+                   此处，先刷relay log，后刷master_info。这样意外的故障可以通过重连恢复机制来恢复。
+                   若先刷master_info，后刷relay log，意外故障时master_info已经更新，比如(0-100, 100-200)，而数据丢失，仅有(0-100)，恢复的replication会从200开始。整个relay log会成为(0-100, 200-)，中间数据会丢失。
+
+     4286          若relay log达到容量限制，则wait_for_relay_log_space
+     4292      }
+     4293 }
+     4296 之后都是收尾操作        
+}
+</code></pre>
+
+<h2 id="toc_2">一些重点</h2>
+
+<ol>
+<li>此处不分析锁什么的，因为看不懂</li>
+<li>4047 设置max_packet_size的目的不明</li>
+<li>4073 开始slave会向master直接发送一些sql，然后解析返回。而不是包装在某个包的某个字段里，用一些预定义的变量来传递结果。<br/>这种设计一下就觉得山寨起来。<br/>后经同事 @神仙 指点，mysql这样做貌似是为了兼容性，免得数据包格式被改来改去。<br/>（看到mysql里大量的兼容代码都拿来处理包结构的问题，最极品的可能是莫过于LOG_EVENT_MINIMAL_HEADER_LEN了）<br/>在对流量影响不大的情况下，直接用sql反复查询的确是个好的解决手法</li>
+<li>4250 将master_info和relay log刷到disk上。<br/>先刷relay log，后刷master_info。这样意外的故障可以通过relay log恢复机制来恢复。<br/>若先刷master_info，后刷relay log，意外故障时master_info已经更新，比如(0-100, 100-200)，而数据(100-200)丢失，仅有(0-100)，恢复的replication会从200开始。整个relay log会成为(0-100, 200-)，中间数据会丢失。</li>
+</ol>
+
+<h2 id="toc_3">start slave时slave向master发送的事件</h2>
+
+<ul>
+<li>
+SELECT UNIX_TIMESTAMP() (rpl_slave.cc:get_master_version_and_clock)</li>
+<li>SHOW VARIABLES LIKE &lsquo;SERVER_ID&rsquo; (rpl_slave.cc:get_master_version_and_clock)</li>
+<li>SET @master_heartbeat_period=? (rpl_slave.cc:get_master_version_and_clock)</li>
+<li>SET @master_binlog_checksum= @@global.binlog_checksum (rpl_slave.cc:get_master_version_and_clock)</li>
+<li>SELECT @master_binlog_checksum (rpl_slave.cc:get_master_version_and_clock)</li>
+<li>SELECT @@GLOBAL.GTID_MODE (rpl_slave.cc:get_master_version_and_clock)</li>
+
+<li><p>SHOW VARIABLES LIKE &lsquo;SERVER_UUID&rsquo; （rpl_slave.cc:get_master_uuid）</p></li>
+
+<li><p>SET @slave_uuid= &lsquo;%s&rsquo;（rpl_slave.cc:io_thread_init_commands)</p></li>
+
+<li><p>COM_REGISTER_SLAVE(rpl_slave.cc:register_slave_on_master)</p></li>
+
+<li><p>COM_BINLOG_DUMP(rpl_slave.cc:request_dump)</p></li>
+</ul>
+
+<h2 id="toc_4">master与slave的时间差</h2>
+
+<p>可以看到slave获得master的时间方法就是直接下sql，完全忽略网络延迟等等等等，属于不精准的时间</p>
+
+<p><a href="http://guduwhuzhe.iteye.com/blog/1901707">这篇文章</a>从源码级别分析了Seconds_Behind_Master的来源，也给出了备库延迟跳跃的原因。总的来说就是Seconds_Behind_Master不可信。</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

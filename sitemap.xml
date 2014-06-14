@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/</loc>
+    <lastmod>2014-06-12T22:32:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-replication</loc>
+    <lastmod>2014-06-12T22:32:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-binlog</loc>
+    <lastmod>2014-06-12T22:30:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-05-15-mysql-table-cache</loc>
+    <lastmod>2014-05-15T20:59:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-04-17-PREVIOUS_GTIDS_LOG_EVENT</loc>
+    <lastmod>2014-04-17T22:08:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-04-05-MDL_map_partition-lock-split</loc>
+    <lastmod>2014-04-05T11:43:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-04-04-MDL</loc>
+    <lastmod>2014-04-04T20:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-04-01-study-mysql-bug-70307-2</loc>
+    <lastmod>2014-04-01T13:07:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-03-26-mysql-fake-master-server</loc>
+    <lastmod>2014-03-26T20:08:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-03-25-go-leak-fd</loc>
+    <lastmod>2014-03-25T22:34:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-03-20-go-file-lock</loc>
+    <lastmod>2014-03-20T22:43:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-03-02-gen</loc>
+    <lastmod>2014-03-02T21:29:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-02-22-go-exec-command-block-when-redirect-stdout</loc>
+    <lastmod>2014-02-22T10:30:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-02-11-try-rollback-master-back-to-slave-by-mysql-plugin</loc>
+    <lastmod>2014-02-11T22:31:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-01-28-compile-mysql-plugin</loc>
+    <lastmod>2014-01-28T16:48:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2014-01-08-jruby-bug-tcp-timeout</loc>
+    <lastmod>2014-01-08T23:04:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-12-26-go-iterate-variable</loc>
+    <lastmod>2013-12-26T22:13:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-12-19-paxos-lease</loc>
+    <lastmod>2013-12-19T20:19:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-12-21-paxos-lease-2</loc>
+    <lastmod>2013-12-19T20:19:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-12-09-test-framework-exp</loc>
+    <lastmod>2013-12-09T20:05:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-11-11-study-memory-reorder-cont</loc>
+    <lastmod>2013-11-11T20:44:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-11-07-study-memory-reorder</loc>
+    <lastmod>2013-11-07T21:40:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-11-05-accrual-failure-detector</loc>
+    <lastmod>2013-11-05T21:50:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-10-25-study-mysql-bug-70307</loc>
+    <lastmod>2013-10-25T22:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-10-22-mysql-flush-logs-make-two-relay-log-file</loc>
+    <lastmod>2013-10-22T21:42:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-10-20-mysql-handle_slave_io-src</loc>
+    <lastmod>2013-10-20T20:17:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-10-16-mysql-mysql_binlog_send-src</loc>
+    <lastmod>2013-10-16T22:50:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-10-14-mha-failover</loc>
+    <lastmod>2013-10-14T21:39:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-10-11-jruby-175-jre-6-stdin-bug</loc>
+    <lastmod>2013-10-11T22:03:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-10-11-hole-in-mysql-56-replication-dead-lock</loc>
+    <lastmod>2013-10-11T21:21:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-08-29-rewrite-project-into-ruby</loc>
+    <lastmod>2013-08-29T21:22:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-05-28-interesting-js</loc>
+    <lastmod>2013-05-28T22:33:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-05-18-java-offheap-memory</loc>
+    <lastmod>2013-05-18T23:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-05-13-mysql-master-slave-standby-failover</loc>
+    <lastmod>2013-05-15T22:40:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-05-12-mysql-binlog-study</loc>
+    <lastmod>2013-05-12T22:59:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-04-16-lisp-symbol-upper-case</loc>
+    <lastmod>2013-04-16T23:12:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-03-31-java-method-passing</loc>
+    <lastmod>2013-03-31T23:22:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-03-19-some-readings-about-localStorage</loc>
+    <lastmod>2013-03-19T23:35:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-03-18-lisp-quote-backquote</loc>
+    <lastmod>2013-03-18T23:59:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-03-17-jquery-noconflict</loc>
+    <lastmod>2013-03-17T23:49:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-03-14-read-write-lock-read-reentrant</loc>
+    <lastmod>2013-03-14T21:37:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-03-13-reentrant-lock</loc>
+    <lastmod>2013-03-13T23:01:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-03-13-notify-and-notify-all</loc>
+    <lastmod>2013-03-13T21:47:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-03-11-thread-wait-sleep</loc>
+    <lastmod>2013-03-11T22:32:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-03-10-false-sharing-0</loc>
+    <lastmod>2013-03-10T23:40:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-03-05-chrome-workspace</loc>
+    <lastmod>2013-03-05T22:21:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-02-28-lisp-book</loc>
+    <lastmod>2013-02-28T00:20:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-02-21-git-study</loc>
+    <lastmod>2013-02-21T21:10:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-02-14-css-clear</loc>
+    <lastmod>2013-02-14T23:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-02-04-Q-uncurry-safe-meta-programming</loc>
+    <lastmod>2013-02-04T23:04:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-02-04-octopress-chinese-character</loc>
+    <lastmod>2013-02-04T21:59:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-02-04-css-compressor-bug</loc>
+    <lastmod>2013-02-04T21:49:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-02-03-javascript-quiz-from-nicolas-c-zakas</loc>
+    <lastmod>2013-02-03T23:36:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-01-29-generate-asm-java-from-classfile</loc>
+    <lastmod>2013-01-29T23:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-01-28-javascript-multiline-html</loc>
+    <lastmod>2013-01-28T23:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-01-27-TProfiler-basic</loc>
+    <lastmod>2013-01-27T23:59:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-01-27-Q-nextTick</loc>
+    <lastmod>2013-01-27T23:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/post/2013-01-26-hello-world</loc>
+    <lastmod>2013-01-26T23:00:00+00:00</lastmod>
+  </url>
+  
+</urlset>

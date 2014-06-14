@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Workspace on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/workspace/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Mon, 11 Mar 2013 22:32:00 UTC</updated>
+    
+    <item>
+      <title>Thread wait 和 sleep</title>
+      <link>http://ikarishinjieva.github.io/post/2013-03-11-thread-wait-sleep</link>
+      <pubDate>Mon, 11 Mar 2013 22:32:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-03-11-thread-wait-sleep</guid>
+      <description>&lt;p&gt;ifeve上发现几个多线程的&lt;a href=&#34;http://ifeve.com/javaconcurrency-interview-questions-base/&#34;&gt;基础问题&lt;/a&gt;。我一直不写多线程（我这两年到底都写了些什么~），重头学起。&lt;/p&gt;
+
+&lt;p&gt;sleep和wait的区别。sleep让出cpu，等一段时间，重新进入竞争，不释放锁。wait等一个状态notify，才重新进入竞争，但释放锁。&lt;/p&gt;
+
+&lt;p&gt;下面代码说明是否释放锁的区别：&lt;/p&gt;
+
+&lt;p&gt;sleep不会释放锁&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+public class MultiThread {
+    public static class T1 extends Thread {
+        @Override
+        public void run() {
+            synchronized (MultiThread.class) {
+                System.out.println(&amp;quot;T1 run&amp;quot;);
+                System.out.println(&amp;quot;T1 sleep&amp;quot;);
+                try {
+                    sleep(10000);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                System.out.println(&amp;quot;T1 wake up&amp;quot;);
+            }
+        }
+    }
+    
+    public static class T2 extends Thread {
+        @Override
+        public void run() {
+            synchronized (MultiThread.class) {
+                System.out.println(&amp;quot;T2 run&amp;quot;);
+            }
+        }
+    }
+
+    public static void main(final String[] args) throws InterruptedException {
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
+        executorService.execute(new T1());
+        Thread.sleep(1000);
+        executorService.execute(new T2());
+        
+        //dispose
+        executorService.awaitTermination(1, TimeUnit.HOURS);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;wait会释放锁&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+public class MultiThread2 {
+    public static class T1 extends Thread {
+        @Override
+        public void run() {
+            synchronized (MultiThread2.class) {
+                System.out.println(&amp;quot;T1 run&amp;quot;);
+                System.out.println(&amp;quot;T1 wait&amp;quot;);
+                try {
+                    MultiThread2.class.wait();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                System.out.println(&amp;quot;T1 wake up&amp;quot;);
+            }
+        }
+    }
+    
+    public static class T2 extends Thread {
+        @Override
+        public void run() {
+            synchronized (MultiThread2.class) {
+                System.out.println(&amp;quot;T2 run&amp;quot;);
+            }
+        }
+    }
+
+    public static void main(final String[] args) throws InterruptedException {
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
+        executorService.execute(new T1());
+        Thread.sleep(1000);
+        executorService.execute(new T2());
+        
+        //dispose
+        Thread.sleep(10000);
+        synchronized (MultiThread2.class) {
+            MultiThread2.class.notify();
+        }
+        executorService.awaitTermination(1, TimeUnit.HOURS);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;sleep的执行结果是T1 run, T1 sleep, T1 wake up, T2 run&lt;/p&gt;
+
+&lt;p&gt;wait的执行结果是T1 run, T1 wait, T2 run (此处锁被释放, T2获得锁), T1 wake up&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Chrome Workspace和File Mapping的使用方法</title>
+      <link>http://ikarishinjieva.github.io/post/2013-03-05-chrome-workspace</link>
+      <pubDate>Tue, 05 Mar 2013 22:21:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-03-05-chrome-workspace</guid>
+      <description>
+
+&lt;p&gt;前几天微博上一直在转Chrome browser引进了workspace的功能，可以在developer tools里直接进行源码编辑。&lt;/p&gt;
+
+&lt;p&gt;但是迄今为止搜索到的文档都没有详细描述使用步骤和限制，36kr上的&lt;a href=&#34;http://www.36kr.com/p/201304.html&#34;&gt;这篇guide&lt;/a&gt;也没有关于mapping的描述，更没有一些坑描述。&lt;/p&gt;
+
+&lt;p&gt;翻看了Chromium的源代码，将使用步骤和在Windows下的坑描述一下。(截止20130305，这个步骤还是很新的)。&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;浏览器版本&lt;/h2&gt;
+
+&lt;p&gt;如果是Chrome(谷歌浏览器)，只有开发者分支上有这个功能，地址&lt;a href=&#34;https://www.google.com/intl/en/chrome/browser/index.html?extra=devchannel#eula&#34;&gt;在此&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;如果是Canary或者Chromium，都有这个功能。&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;使用步骤&lt;/h2&gt;
+
+&lt;ol&gt;
+&lt;li&gt;开启&amp;rdquo;开发者工具实验&amp;rdquo;(这翻译真心烂&amp;hellip;): 在browser输入chrome://flags/，启用&amp;rdquo;开发者工具实验&amp;rdquo;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;img src=&#34;../../blog-img/2013-03-05-chrome-workspace-1.png&#34; alt=&#34;启用&amp;quot;开发者工具实验&amp;quot;&#34; title=&#34;启用&#39;开发者工具实验&#39;&#34; /&gt;
+&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;重启chrome&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;打开要调试的site，进入Developer tools的setting
+&lt;img src=&#34;../../blog-img/2013-03-05-chrome-workspace-2.png&#34; alt=&#34;进入Developer tools的setting&#34; title=&#34;进入Developer tools的setting&#34; /&gt;
+&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;启用Workspace功能 (Developer tools -&amp;gt; setting -&amp;gt; Experiments -&amp;gt; File system folders in Sources Panel)
+&lt;img src=&#34;../../blog-img/2013-03-05-chrome-workspace-3.png&#34; alt=&#34;启用Workspace功能&#34; title=&#34;启用Workspace功能&#34; /&gt;
+&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;重启Developer Tools, 可以看到Settings里Workspace页
+&lt;img src=&#34;../../blog-img/2013-03-05-chrome-workspace-4.png&#34; alt=&#34;Settings里Workspace页&#34; title=&#34;Settings里Workspace页&#34; /&gt;
+&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;假设源js的目录为c:\test, 需要现在这个目录下创建空文件.allow-devtools-edit, browser才会认可这个为源文件夹
+&lt;img src=&#34;../../blog-img/2013-03-05-chrome-workspace-5.png&#34; alt=&#34;创建空文件.allow-devtools-edit&#34; title=&#34;创建空文件.allow-devtools-edit&#34; /&gt;
+&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;在Developer tool -&amp;gt; setting -&amp;gt;Workspace -&amp;gt; File system里，添加源js的目录
+&lt;img src=&#34;../../blog-img/2013-03-05-chrome-workspace-6.png&#34; alt=&#34;添加源js的目录&#34; title=&#34;添加源js的目录&#34; /&gt;
+&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;重启Developer Tools, 可以在Sources页里看到本地folder
+&lt;img src=&#34;../../blog-img/2013-03-05-chrome-workspace-7.png&#34; alt=&#34;可以在Sources页里看到本地folder&#34; title=&#34;可以在Sources页里看到本地folder&#34; /&gt;
+&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;此时在Chrome用Ctrl + O打开文件列表，可以看到两个相同的文件，一个是远端，一个是本地。在本地文件上打断点没有作用
+&lt;img src=&#34;../../blog-img/2013-03-05-chrome-workspace-8.png&#34; alt=&#34;Ctrl + O打开文件列表，可以看到两个相同的文件&#34; title=&#34;Ctrl + O打开文件列表，可以看到两个相同的文件&#34; /&gt;
+&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;在Developer tool -&amp;gt; setting -&amp;gt;Workspace -&amp;gt; Mappings里，添加mapping：&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;code&gt;http://localhost:7001/.../js/slickgrid C:\test&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;URL是以http开头的完整路径，url和path都万万不要以/结尾，虽然添加后会自动显示为以/结尾。千万注意大小写会坑爹，要保持mapping和folder的大小写一致&lt;/em&gt;
+&lt;img src=&#34;../../blog-img/2013-03-05-chrome-workspace-9.png&#34; alt=&#34;添加mapping&#34; title=&#34;添加mapping&#34; /&gt;
+&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;此时，用Ctrl + O打开文件列表，只能看到一个文件，在本地文件上可以打断点(此处有坑，请阅读坑部分)，对本地文件的修改也会灵验的(直接反应在C:\test中)。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;坑&lt;/h2&gt;
+
+&lt;ol&gt;
+&lt;li&gt;千万别在mapping的路径后加&amp;rsquo;/&amp;lsquo;（保存时会自动加上去），否则可能mapping不上。&lt;/li&gt;
+&lt;li&gt;大小写会坑爹，千万保持mapping和folder的大小写一致。&lt;/li&gt;
+&lt;li&gt;如果你的远端文件路径带参数，比如 &lt;code&gt;http://xxx/js/1.js?d=1&lt;/code&gt;，断点不会触发。已经&lt;a href=&#34;https://code.google.com/p/chromium/issues/detail?id=180202&#34;&gt;报了个bug&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;应该说workspace是挺有用的功能，不过由于坑3，在项目中的运用不畅。本想自己修修，发现这个bug涉及c++代码，表示放弃。&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

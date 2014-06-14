@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Css-Cookbook on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/css-cookbook/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Thu, 14 Feb 2013 23:00:00 UTC</updated>
+    
+    <item>
+      <title>css clear属性</title>
+      <link>http://ikarishinjieva.github.io/post/2013-02-14-css-clear</link>
+      <pubDate>Thu, 14 Feb 2013 23:00:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-02-14-css-clear</guid>
+      <description>&lt;p&gt;开始学习css。
+&lt;a href=&#34;http://www.amazon.com/CSS-Cookbook-Edition-Animal-Guide/dp/059615593X/&#34;&gt;css cookbook&lt;/a&gt; 2.21讨论了clear的用法。&lt;/p&gt;
+
+&lt;p&gt;简单做了个实验。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;lt;img class=&#39;leftFloat&#39; /&amp;gt;
+&amp;lt;p&amp;gt;test test line 1&amp;lt;/p&amp;gt;
+&amp;lt;img style=&#39;clear:left&#39; class=&#39;rightFloat&#39;/&amp;gt;
+&amp;lt;p style=&#39;clear:left&#39;&amp;gt;test test line 2&amp;lt;/p&amp;gt;
+&amp;lt;p&amp;gt;test test line 3&amp;lt;/p&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;总的感觉就是clear可以某方向(left/right/both)上的浮动元素算成固定元素，来决定当前元素的高度。&lt;/p&gt;
+
+&lt;p&gt;书中只是简单地一句话，实践起来float和固定元素需要分别clear。(可以将两个clear:left随便去掉一个，相应的元素就会上浮)。&lt;/p&gt;
+
+&lt;p&gt;&lt;css cookbook&gt; 2.22也讨论了利用clear来撑开float元素所在容器的方法。参考里面也描述了同样的用法。&lt;/p&gt;
+
+&lt;p&gt;一些参考：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://www.w3school.com.cn/css/css_positioning_floating.asp&#34;&gt;http://www.w3school.com.cn/css/css_positioning_floating.asp&lt;/a&gt; 介绍了floating和clear，涵盖了&lt;css cookbook&gt;2.21 &amp;amp; 2.22的内容&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

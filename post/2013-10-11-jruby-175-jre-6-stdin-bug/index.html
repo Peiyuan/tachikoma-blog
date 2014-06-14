@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> jruby backtick &#43; jre 6 会卡住 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>jruby backtick &#43; jre 6 会卡住</h1>
+  <span class="post-date">Fri, Oct 11, 2013      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/jruby">jruby</a> </li>
+      
+        <li><a href="tags/jre">jre</a> </li>
+      
+        <li><a href="tags/bug">bug</a> </li>
+      
+    </ul></span>
+      
+
+<p>最近在jruby 1.7.5 + jre 6上碰到的土亢</p>
+
+<h2 id="toc_0">现象</h2>
+
+<p>用backtick调用命令，比如<code>./some_script</code></p>
+
+<p>在调用命令之前/同时在terminal输入一些回车，有一定概率backtick的调用会卡住不返回。
+此时再输入一个回车，调用会继续执行并返回。</p>
+
+<h2 id="toc_1">解决</h2>
+
+<p>一切靠猜</p>
+
+<p>jruby有个bug：<a href="http://jira.codehaus.org/browse/JRUBY-4626">Gaps in STDIN pipe stream if backtick is used</a></p>
+
+<p>Charles Oliver Nutter在comment中写到&rdquo;For JRuby 1.7pre1 on Java 7, this should be fixed; TTY should be handled correctly. For other Java versions, we can&rsquo;t fix this.&ldquo;，于是最方便的就是升级jre到7</p>
+
+<p>经验证升级jre可以从土亢中爬出来。
+如果难以升级jre，参看<a href="https://www.ruby-forum.com/topic/4413754">这里</a>，这个兄弟做了很全的测试。可以用IO.popen或者Open3.popen3替换backtick。</p>
+
+<h2 id="toc_2">经验</h2>
+
+<p>jruby有坑，同时也提供了便捷的手段将现有的java项目改成比较爽的样子。这些坑是难以预料的，做好准备，然后一如既往踩过去。</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

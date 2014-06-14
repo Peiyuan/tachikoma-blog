@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Table-Cache on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/table-cache/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Thu, 15 May 2014 20:59:00 UTC</updated>
+    
+    <item>
+      <title>对mysql table cache的理解</title>
+      <link>http://ikarishinjieva.github.io/post/2014-05-15-mysql-table-cache</link>
+      <pubDate>Thu, 15 May 2014 20:59:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-05-15-mysql-table-cache</guid>
+      <description>
+
+&lt;p&gt;最近读了mysql table_cache部分的一些代码.&lt;/p&gt;
+
+&lt;p&gt;首先推荐这篇&lt;a href=&#34;http://blog.sina.com.cn/s/blog_4673e60301010r5u.html&#34;&gt;导读&lt;/a&gt;, 写的比较详尽. 不对其中已有的部分进行重复, 仅记录自己的一些理解.&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;最简单的功能&lt;/h2&gt;
+
+&lt;p&gt;叫做table_cache, 就是对&lt;code&gt;table&lt;/code&gt;做擦车(cache).&lt;/p&gt;
+
+&lt;p&gt;其中&lt;code&gt;table&lt;/code&gt;是指的mysql打开的表的描述结构(descriptor)(&lt;a href=&#34;http://osxr.org/mysql/source/sql/table.h#0974&#34;&gt;&lt;code&gt;TABLE&lt;/code&gt;&lt;/a&gt;),  简单理解就是mysql要操作一张表时, 就会先打开其descriptor, 打开后读取其中信息, 然后进行操作.&lt;/p&gt;
+
+&lt;p&gt;为了快速访问, cache 往往类似于 Hash. table_cache 的 key 是
+    db_name + table_name
+table_cache 的 value 是 descriptor 的集合, 即 &lt;a href=&#34;http://osxr.org/mysql/source/sql/table_cache.h#0208&#34;&gt;&lt;code&gt;Table_cache_element&lt;/code&gt;&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;value 是 descriptor 的集合而不是 descriptor, 是因为对于同一张表, 在cache中同时会打开多个 descriptor&lt;/p&gt;
+
+&lt;p&gt;额外一提, table_cache是按线程号分桶的, 参看&lt;code&gt;Table_cache_manager&lt;/code&gt;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;进一步, 留下被回收的元素&lt;/h2&gt;
+
+&lt;p&gt;传统擦车, 不用的元素就直接回收了. table_cache暂存了不用的元素, 提高命中率.&lt;/p&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;Table_cache_element&lt;/code&gt;一共两个列表:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;used_tables&lt;/li&gt;
+&lt;li&gt;free_tables&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;进一步, 抽出共同的部分&lt;/h2&gt;
+
+&lt;p&gt;同一张表的多个 descriptor, 会有公共部分, 抽出这些公共部分, 能有效节省资源.&lt;/p&gt;
+
+&lt;p&gt;比如&lt;code&gt;mem_root&lt;/code&gt; (个人称之为受管内存区), 此内存区管理着跟某表相关的一些数据结构, 且受mysqld的管制. 如果同一张表的每个 descriptor 都独立管理一篇内存, 会引起不必要的浪费.&lt;/p&gt;
+
+&lt;p&gt;抽出的公共部分称为&lt;a href=&#34;http://osxr.org/mysql/source/sql/table.h#0584&#34;&gt;&lt;code&gt;TABLE_SHARE&lt;/code&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;进一步, 公共部分也得擦车&lt;/h2&gt;
+
+&lt;p&gt;&lt;code&gt;TABLE_SHARE&lt;/code&gt; 也被擦车了, 其被回收的元素跟&lt;code&gt;TABLE&lt;/code&gt;一样也被擦车了.&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_4&#34;&gt;擦车的步骤&lt;/h2&gt;
+
+&lt;p&gt;简述擦车的步骤&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;在cache中查找&lt;code&gt;TABLE&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;如果找到&lt;code&gt;TABLE&lt;/code&gt;, 则成功&lt;/li&gt;
+&lt;li&gt;在cache中查找&lt;code&gt;TABLE_SHARE&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;如果找不到&lt;code&gt;TABLE_SHARE&lt;/code&gt;, 则生成一个&lt;/li&gt;
+&lt;li&gt;根据&lt;code&gt;TABLE_SHARE&lt;/code&gt;, 生成一个&lt;code&gt;TABLE&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;维护好cache&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;toc_5&#34;&gt;如果找不到&lt;code&gt;TABLE_SHARE&lt;/code&gt;&lt;/h2&gt;
+
+&lt;p&gt;参看&lt;a href=&#34;http://osxr.org/mysql/ident?_i=get_table_share_with_discover&#34;&gt;&lt;code&gt;get_table_share_with_discover&lt;/code&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;如果内存中找不到&lt;code&gt;TABLE_SHARE&lt;/code&gt;, 则向存储引擎查询, 如果存储引擎可以提供, 则进行&lt;a href=&#34;http://osxr.org/mysql/ident?_i=recover_from_failed_open&#34;&gt;discover&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_6&#34;&gt;关于死锁&lt;/h2&gt;
+
+&lt;p&gt;table_cache 里有很多代码是关于死锁的处理, 其一个主要原因是因为 mysql 分为了sql层和存储引擎层, MDL的死锁检测限于sql层, 存储引擎层自带死锁检测, 但一个死锁如果跨过两层, 则需要特殊处理&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

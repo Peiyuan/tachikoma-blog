@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Css on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/css/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Mon, 04 Feb 2013 21:49:00 UTC</updated>
+    
+    <item>
+      <title>CSS compressor bug</title>
+      <link>http://ikarishinjieva.github.io/post/2013-02-04-css-compressor-bug</link>
+      <pubDate>Mon, 04 Feb 2013 21:49:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-02-04-css-compressor-bug</guid>
+      <description>&lt;p&gt;使用&lt;a href=&#34;http://www.csscompressor.com/&#34;&gt;css compressor&lt;/a&gt; 压缩项目中的css，可以合并相同定义的style，但也引起了bug。&lt;/p&gt;
+
+&lt;p&gt;比如：&lt;/p&gt;
+
+&lt;p&gt;.A的类型应当是background: BB&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;.A, .B {
+        background: BB
+}
+ 
+.A {
+        background: AA
+}
+
+//in another file
+.A, .B {
+        background: BB
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;压缩后，.A的类型变为background: AA&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;.A, .B {
+        background: BB
+}
+ 
+.A {
+        background: AA
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;因为合并了相同定义，覆盖关系被打乱。&lt;/p&gt;
+
+&lt;p&gt;暂时没找到好的css compressor，来分解并合并css&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

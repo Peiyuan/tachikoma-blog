@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> MDL_map_partition中对锁的过渡 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>MDL_map_partition中对锁的过渡</h1>
+  <span class="post-date">Sat, Apr 5, 2014      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/mysql">mysql</a> </li>
+      
+        <li><a href="tags/mdl">MDL</a> </li>
+      
+        <li><a href="tags/lock">lock</a> </li>
+      
+    </ul></span>
+      
+
+<p>在<code>MDL</code>源码中有一段<code>MDL_map_partition</code>中对锁的过渡有点意思, 拿出来分析一下</p>
+
+<h2 id="toc_0">场景</h2>
+
+<p><code>MDL_map_partition</code>是容纳<code>MDL_lock</code>的一个容器, <code>MDL_lock</code>可以简单的理解为一种锁.</p>
+
+<p>那么场景问题是现在我要从锁容器<code>C</code>中查找一个锁<code>L</code>并加锁<code>L</code>, 怎样做到多线程安全</p>
+
+<p>场景中<code>C</code>上有保护<code>C</code>的锁<code>A</code> (容器锁), <code>L</code>上的锁为<code>B</code> (成员锁) (此处做了简化, 实际上<code>MDL_lock</code>并不是一个锁, 而是类似于条件变量, 而锁<code>B</code>是保护<code>L</code>的锁. 此处将<code>L</code>简化为一把锁)</p>
+
+<h2 id="toc_1">分析1</h2>
+
+<p>最简单的方法, 就是<code>A</code>加锁, <code>B</code>加锁, <code>A</code>解锁. 这种方法肯定不会有错, 但是并发性上会出现问题. 比如以下场景</p>
+
+<ol>
+<li>线程T1持有<code>B</code></li>
+<li>线程T2正在容器中查找<code>B</code>.</li>
+<li>线程T3在同一个容器中查找另外一个<code>MDL_lock</code></li>
+</ol>
+
+<p>T2先将<code>A</code>加锁, 加锁<code>B</code>时, 由于T1持有<code>B</code>, T2被阻塞; T3在同一个容器中查找另一个不相关的成员, 先要加锁<code>A</code>, <code>A</code>被T2持有, T3被阻塞</p>
+
+<p>因此, 这种做法的并发性很差</p>
+
+<h2 id="toc_2">分析2</h2>
+
+<p>提高并发性的关键是将<code>A</code>锁过渡到<code>B</code>锁, 比如这样: <code>A</code>加锁, 查找<code>B</code>, <code>A</code>解锁, <code>B</code>加锁.</p>
+
+<p>这种方法解决了并发性, 但显而易见形成了一个无锁区 (从<code>A</code>解锁到<code>B</code>加锁这个区域). 如果在无锁区另一个线程将<code>B</code>销毁或移出容器, 那么后面的<code>B</code>加锁操作就会悲剧</p>
+
+<h2 id="toc_3">分析3</h2>
+
+<p>面对无锁区的问题, 可以试着加<code>version</code>(版本变量)来解决, 规则如下:</p>
+
+<ul>
+<li>任何将成员移入/移出容器的情况, 都需要获得容器锁<code>A</code>和成员锁<code>B</code>, 并在元素<code>version</code>上加1</li>
+<li>对成员的销毁, 需要先将成员移出容器</li>
+</ul>
+
+<p>这样, 查找成员的流程变为:</p>
+
+<ol>
+<li>线程T1, 对<code>A</code>加锁, 找到<code>B</code>, 记录<code>B</code>的<code>version</code>, 记为v1. 对<code>A</code>解锁</li>
+<li>线程T2, <code>B</code>销毁或移出容器, 需要获得<code>A</code>和<code>B</code>锁, 对<code>version</code>加1, 记为v2</li>
+<li>线程T1, 等到T2释放<code>B</code>锁后, 可获得<code>B</code>锁, 发现<code>v1 != v2</code>, 意味着成员可能在容器中已经被移出或销毁, 则需要重试整个过程</li>
+</ol>
+
+<p>加入<code>version</code>后, 对于销毁成员的场景, 并发性并没有改变 (因为仍然需要同时获得两把锁), 但对于查找成员的场景, 并发性和分析2一样</p>
+
+<p>不幸的是, 这个场景仍然存在问题, 很容易看到其中一个逻辑问题, T1在T2销毁<code>B</code>锁后, 还获得了<code>B</code>锁. 也就是T2不能即刻销毁<code>B</code>锁, 否则所有等待<code>B</code>锁的线程都会悲剧. 那<code>B</code>锁何时能被安全销毁</p>
+
+<h2 id="toc_4">分析4</h2>
+
+<p>要解决分析3的问题, 可以在<code>B</code>上添加引用计数, 细节如下:</p>
+
+<ul>
+<li>在成员未被移出容器时, 持有<code>A</code>锁可以对成员引用计数<code>usage_count</code>进行加1, 即在容器中查找成员时, 容器负责对成员的<code>usage_count</code>加1</li>
+<li>持有<code>B</code>锁可以对自己的解引用计数<code>release_count</code>进行加1, 即使用者在使用完<code>B</code>后, 对<code>B</code>进行解引用</li>
+<li>如果<code>usage_count</code> == <code>release_count</code>, 则<code>B</code>可以被安全销毁</li>
+</ul>
+
+<p>可以看到<code>usage_count</code>和<code>release_count</code>在分别在不同锁的保护下, 代入分析3的场景, 发现可以解决分析3的问题</p>
+
+<p>还有一些需要说明的边界情况</p>
+
+<ul>
+<li>在成员已经被移出容器后, 成员引用计数<code>usage_count</code>不再受<code>A</code>锁保护, 而是受<code>B</code>锁保护. 相当于容器已经不再管理成员的引用计数</li>
+<li>如何判断&rdquo;成员已经被移出容器&rdquo;, 可以在成员上添加状态量<code>is_removed_from_container</code>, 读取此状态需要<code>A</code>锁或<code>B</code>锁, 修改此状态需要<code>A</code>锁和<code>B</code>锁.</li>
+</ul>
+
+<h2 id="toc_5">Mysql的实现</h2>
+
+<p>Mysql的实现和之前的分析大致相同, 给出映射表</p>
+
+<table>
+<thead>
+<tr>
+<td>分析里的概念</td>
+<td>Mysql的变量</td>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>版本变量<code>version</code></td>
+<td><code>MDL_lock.m_version</code></td>
+</tr>
+
+<tr>
+<td>成员引用计数<code>usage_count</code></td>
+<td><code>MDL_lock.m_ref_usage</code></td>
+</tr>
+
+<tr>
+<td>成员解引用计数<code>release_count</code></td>
+<td><code>MDL_lock.m_ref_release</code></td>
+</tr>
+
+<tr>
+<td>状态量<code>is_removed_from_container</code></td>
+<td><code>MDL_lock.m_is_destroyed</code></td>
+</tr>
+</tbody>
+</table>
+
+<p>实现锁拆分的函数为<code>MDL_map_partition::move_from_hash_to_lock_mutex</code>, 一看就懂</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

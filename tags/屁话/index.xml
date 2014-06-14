@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>屁话 on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/e5b181e8af9d/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Sat, 26 Jan 2013 23:00:00 UTC</updated>
+    
+    <item>
+      <title>Hello World</title>
+      <link>http://ikarishinjieva.github.io/post/2013-01-26-hello-world</link>
+      <pubDate>Sat, 26 Jan 2013 23:00:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-01-26-hello-world</guid>
+      <description>&lt;p&gt;久不写技术博客。Google和Ms onsite面试都失败告终，反思下自己。觉得缺乏整理，这两年多的杂七杂八都记在Evernote和心里，很多想做的事情也都积压下来，还需静下心来做些整理。&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

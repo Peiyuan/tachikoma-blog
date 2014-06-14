@@ -1,8 +1,0 @@
-+++
-draft = false
-title = "Git入门"
-date = 2013-02-21T21:10:00Z
-tags = [ "git"]
-+++
-
-花了两天完成[这个教程](http://pcottle.github.com/learnGitBranching)。作为git的入门非常好。

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> 对heartbeat φ累积失败检测算法的学习 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>对heartbeat φ累积失败检测算法的学习</h1>
+  <span class="post-date">Tue, Nov 5, 2013      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/heartbeat">heartbeat</a> </li>
+      
+        <li><a href="tags/accrual-failure-detection">accrual failure detection</a> </li>
+      
+        <li><a href="tags/cluster">cluster</a> </li>
+      
+    </ul></span>
+      <p>偶尔读到了这篇&rdquo;<a href="http://blog.csdn.net/chen77716/article/details/6541968">φ累积失败检测算法</a>&ldquo;，写的非常不错。藉此了解了这个用于heartbeat检测的算法，在此记录一下我自己理解的简单版本</p>
+
+<p>heartbeat时我们使用固定的时间限制t0，当heartbeat的返回时长超过t0时，就认为heartbeat失败。这个方法的弊端是：固定的t0是在事先测定的，不会随网络状况的变化而智能变化。φ累积失败检测算法就是要解决这个问题</p>
+
+<p>失败检验算法的基本思想就是：成功判定“heartbeat失败”的概率符合<a href="http://zh.wikipedia.org/wiki/%E6%AD%A3%E6%80%81%E5%88%86%E5%B8%83">正态分布曲线</a>，x轴是本次心跳距上次心跳的差距时间，y轴是差距为x的心跳的概率。
+<br/>也就是说，假设我们已经有一条正态分布的曲线，当前时间是Tnow，上次心跳成功的时间是Tlast，那么从(Tlast-Tnow) ~ +∞这个区间内的积分（设为w，w<1）就代表某心跳间隔从Tlast维持到大于Tnow的时间的概率，即在Tnow时判定“heartbeat失败”的<b>失败率</b>，就是说如果我们在Tnow这个时间点判定“heartbeat失败”，那么有w的概率我们做出了错误的判定（heartbeat本该是成功的，也许只是被延迟了= =）</p>
+
+<p>臆测这个算法的基本步骤是：</p>
+
+<ol>
+<li>我们假设判定失败率的阈值是&lt;=10%，也就是允许我们判定“heartbeat失败”时最大失败率为10%。</li>
+<li>取样本空间，比如前N次心跳的差距时间（心跳接收时间-上次心跳的接收时间）。计算这个样本空间的均值和方差，就可以计算出正态分布曲线</li>
+<li>在某时间Tnow，计算(Tlast-Tnow) ~ +∞这个区间内的积分（设为w），即为判定“heartbeat失败”的<b>失败率</b>，若大于阈值10%，则可以判定“heartbeat”失败</li>
+<li>重复取样，继续算法</li>
+</ol>
+
+<p>到此基本结束，以下是对原文&rdquo;<a href="http://blog.csdn.net/chen77716/article/details/6541968">φ累积失败检测算法</a>&ldquo;的一些个人补充</p>
+
+<ul>
+<li>原文有φ这个变量，主要是因为计算出来的判定失败率可能经常是非常小的小数，所以φ取其负对数，方便比较</li>
+<li>在此不再重复引用原文的公式</li>
+</ul>
+
+<p>最后，可参考论文<a href="https://www.google.com/url?sa=t&amp;rct=j&amp;q=&amp;esrc=s&amp;source=web&amp;cd=1&amp;cad=rja&amp;ved=0CDEQFjAA&amp;url=http%3A%2F%2Fddg.jaist.ac.jp%2Fpub%2FHDY%2B04.pdf&amp;ei=L_94Uo3OGomciQLCx4GQBg&amp;usg=AFQjCNGYrM_1R5LmY4wrDlKnykatr3VBRA&amp;sig2=G8d5gBsR8MpIwgfU9Xbt7A&amp;bvm=bv.55980276,d.cGE">
+The φ Accrual Failure Detector</a>：</p>
+
+<ul>
+<li>这篇论文非常详细（啰嗦）地描述了要解决的问题场景</li>
+<li>这篇论文给出了一般性的累积失败检测法要满足的特性</li>
+<li>这篇论文给出了用正态分布曲线来计算的步骤</li>
+<li>这篇论文给出了算法正确性的比较结果</li>
+</ul>
+
+<p>最后的最后，推荐<a href="http://blog.csdn.net/chen77716">这个大牛陈国庆的blog</a>，其中文章写的质量高，里面也有对Paxos算法的介绍，配合paxos的wiki，解析的很到位</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

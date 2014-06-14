@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Lock on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/lock/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Sat, 05 Apr 2014 11:43:00 UTC</updated>
+    
+    <item>
+      <title>MDL_map_partition中对锁的过渡</title>
+      <link>http://ikarishinjieva.github.io/post/2014-04-05-MDL_map_partition-lock-split</link>
+      <pubDate>Sat, 05 Apr 2014 11:43:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-04-05-MDL_map_partition-lock-split</guid>
+      <description>
+
+&lt;p&gt;在&lt;code&gt;MDL&lt;/code&gt;源码中有一段&lt;code&gt;MDL_map_partition&lt;/code&gt;中对锁的过渡有点意思, 拿出来分析一下&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;场景&lt;/h2&gt;
+
+&lt;p&gt;&lt;code&gt;MDL_map_partition&lt;/code&gt;是容纳&lt;code&gt;MDL_lock&lt;/code&gt;的一个容器, &lt;code&gt;MDL_lock&lt;/code&gt;可以简单的理解为一种锁.&lt;/p&gt;
+
+&lt;p&gt;那么场景问题是现在我要从锁容器&lt;code&gt;C&lt;/code&gt;中查找一个锁&lt;code&gt;L&lt;/code&gt;并加锁&lt;code&gt;L&lt;/code&gt;, 怎样做到多线程安全&lt;/p&gt;
+
+&lt;p&gt;场景中&lt;code&gt;C&lt;/code&gt;上有保护&lt;code&gt;C&lt;/code&gt;的锁&lt;code&gt;A&lt;/code&gt; (容器锁), &lt;code&gt;L&lt;/code&gt;上的锁为&lt;code&gt;B&lt;/code&gt; (成员锁) (此处做了简化, 实际上&lt;code&gt;MDL_lock&lt;/code&gt;并不是一个锁, 而是类似于条件变量, 而锁&lt;code&gt;B&lt;/code&gt;是保护&lt;code&gt;L&lt;/code&gt;的锁. 此处将&lt;code&gt;L&lt;/code&gt;简化为一把锁)&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;分析1&lt;/h2&gt;
+
+&lt;p&gt;最简单的方法, 就是&lt;code&gt;A&lt;/code&gt;加锁, &lt;code&gt;B&lt;/code&gt;加锁, &lt;code&gt;A&lt;/code&gt;解锁. 这种方法肯定不会有错, 但是并发性上会出现问题. 比如以下场景&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;线程T1持有&lt;code&gt;B&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;线程T2正在容器中查找&lt;code&gt;B&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;线程T3在同一个容器中查找另外一个&lt;code&gt;MDL_lock&lt;/code&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;T2先将&lt;code&gt;A&lt;/code&gt;加锁, 加锁&lt;code&gt;B&lt;/code&gt;时, 由于T1持有&lt;code&gt;B&lt;/code&gt;, T2被阻塞; T3在同一个容器中查找另一个不相关的成员, 先要加锁&lt;code&gt;A&lt;/code&gt;, &lt;code&gt;A&lt;/code&gt;被T2持有, T3被阻塞&lt;/p&gt;
+
+&lt;p&gt;因此, 这种做法的并发性很差&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;分析2&lt;/h2&gt;
+
+&lt;p&gt;提高并发性的关键是将&lt;code&gt;A&lt;/code&gt;锁过渡到&lt;code&gt;B&lt;/code&gt;锁, 比如这样: &lt;code&gt;A&lt;/code&gt;加锁, 查找&lt;code&gt;B&lt;/code&gt;, &lt;code&gt;A&lt;/code&gt;解锁, &lt;code&gt;B&lt;/code&gt;加锁.&lt;/p&gt;
+
+&lt;p&gt;这种方法解决了并发性, 但显而易见形成了一个无锁区 (从&lt;code&gt;A&lt;/code&gt;解锁到&lt;code&gt;B&lt;/code&gt;加锁这个区域). 如果在无锁区另一个线程将&lt;code&gt;B&lt;/code&gt;销毁或移出容器, 那么后面的&lt;code&gt;B&lt;/code&gt;加锁操作就会悲剧&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;分析3&lt;/h2&gt;
+
+&lt;p&gt;面对无锁区的问题, 可以试着加&lt;code&gt;version&lt;/code&gt;(版本变量)来解决, 规则如下:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;任何将成员移入/移出容器的情况, 都需要获得容器锁&lt;code&gt;A&lt;/code&gt;和成员锁&lt;code&gt;B&lt;/code&gt;, 并在元素&lt;code&gt;version&lt;/code&gt;上加1&lt;/li&gt;
+&lt;li&gt;对成员的销毁, 需要先将成员移出容器&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;这样, 查找成员的流程变为:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;线程T1, 对&lt;code&gt;A&lt;/code&gt;加锁, 找到&lt;code&gt;B&lt;/code&gt;, 记录&lt;code&gt;B&lt;/code&gt;的&lt;code&gt;version&lt;/code&gt;, 记为v1. 对&lt;code&gt;A&lt;/code&gt;解锁&lt;/li&gt;
+&lt;li&gt;线程T2, &lt;code&gt;B&lt;/code&gt;销毁或移出容器, 需要获得&lt;code&gt;A&lt;/code&gt;和&lt;code&gt;B&lt;/code&gt;锁, 对&lt;code&gt;version&lt;/code&gt;加1, 记为v2&lt;/li&gt;
+&lt;li&gt;线程T1, 等到T2释放&lt;code&gt;B&lt;/code&gt;锁后, 可获得&lt;code&gt;B&lt;/code&gt;锁, 发现&lt;code&gt;v1 != v2&lt;/code&gt;, 意味着成员可能在容器中已经被移出或销毁, 则需要重试整个过程&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;加入&lt;code&gt;version&lt;/code&gt;后, 对于销毁成员的场景, 并发性并没有改变 (因为仍然需要同时获得两把锁), 但对于查找成员的场景, 并发性和分析2一样&lt;/p&gt;
+
+&lt;p&gt;不幸的是, 这个场景仍然存在问题, 很容易看到其中一个逻辑问题, T1在T2销毁&lt;code&gt;B&lt;/code&gt;锁后, 还获得了&lt;code&gt;B&lt;/code&gt;锁. 也就是T2不能即刻销毁&lt;code&gt;B&lt;/code&gt;锁, 否则所有等待&lt;code&gt;B&lt;/code&gt;锁的线程都会悲剧. 那&lt;code&gt;B&lt;/code&gt;锁何时能被安全销毁&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_4&#34;&gt;分析4&lt;/h2&gt;
+
+&lt;p&gt;要解决分析3的问题, 可以在&lt;code&gt;B&lt;/code&gt;上添加引用计数, 细节如下:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;在成员未被移出容器时, 持有&lt;code&gt;A&lt;/code&gt;锁可以对成员引用计数&lt;code&gt;usage_count&lt;/code&gt;进行加1, 即在容器中查找成员时, 容器负责对成员的&lt;code&gt;usage_count&lt;/code&gt;加1&lt;/li&gt;
+&lt;li&gt;持有&lt;code&gt;B&lt;/code&gt;锁可以对自己的解引用计数&lt;code&gt;release_count&lt;/code&gt;进行加1, 即使用者在使用完&lt;code&gt;B&lt;/code&gt;后, 对&lt;code&gt;B&lt;/code&gt;进行解引用&lt;/li&gt;
+&lt;li&gt;如果&lt;code&gt;usage_count&lt;/code&gt; == &lt;code&gt;release_count&lt;/code&gt;, 则&lt;code&gt;B&lt;/code&gt;可以被安全销毁&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;usage_count&lt;/code&gt;和&lt;code&gt;release_count&lt;/code&gt;在分别在不同锁的保护下, 代入分析3的场景, 发现可以解决分析3的问题&lt;/p&gt;
+
+&lt;p&gt;还有一些需要说明的边界情况&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;在成员已经被移出容器后, 成员引用计数&lt;code&gt;usage_count&lt;/code&gt;不再受&lt;code&gt;A&lt;/code&gt;锁保护, 而是受&lt;code&gt;B&lt;/code&gt;锁保护. 相当于容器已经不再管理成员的引用计数&lt;/li&gt;
+&lt;li&gt;如何判断&amp;rdquo;成员已经被移出容器&amp;rdquo;, 可以在成员上添加状态量&lt;code&gt;is_removed_from_container&lt;/code&gt;, 读取此状态需要&lt;code&gt;A&lt;/code&gt;锁或&lt;code&gt;B&lt;/code&gt;锁, 修改此状态需要&lt;code&gt;A&lt;/code&gt;锁和&lt;code&gt;B&lt;/code&gt;锁.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&#34;toc_5&#34;&gt;Mysql的实现&lt;/h2&gt;
+
+&lt;p&gt;Mysql的实现和之前的分析大致相同, 给出映射表&lt;/p&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;td&gt;分析里的概念&lt;/td&gt;
+&lt;td&gt;Mysql的变量&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;版本变量&lt;code&gt;version&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_version&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;成员引用计数&lt;code&gt;usage_count&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_ref_usage&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;成员解引用计数&lt;code&gt;release_count&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_ref_release&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;状态量&lt;code&gt;is_removed_from_container&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_is_destroyed&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;实现锁拆分的函数为&lt;code&gt;MDL_map_partition::move_from_hash_to_lock_mutex&lt;/code&gt;, 一看就懂&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>golang, windows和linux上的文件锁</title>
+      <link>http://ikarishinjieva.github.io/post/2014-03-20-go-file-lock</link>
+      <pubDate>Thu, 20 Mar 2014 22:43:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-03-20-go-file-lock</guid>
+      <description>
+
+&lt;p&gt;直接上代码, &lt;code&gt;LockFile&lt;/code&gt;可以获得一个文件的独占权, 或阻塞等待&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;linux&lt;/h2&gt;
+
+&lt;pre&gt;&lt;code&gt;    func LockFile(file *os.File) error {
+        return syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;windows&lt;/h2&gt;
+
+&lt;pre&gt;&lt;code&gt;    func LockFile(file *os.File) error {
+        h, err := syscall.LoadLibrary(&amp;quot;kernel32.dll&amp;quot;)
+        if err != nil {
+            return err
+        }
+        defer syscall.FreeLibrary(h)
+    
+        addr, err := syscall.GetProcAddress(h, &amp;quot;LockFile&amp;quot;)
+        if err != nil {
+            return err
+        }
+        for {
+            r0, _, _ := syscall.Syscall6(addr, 5, file.Fd(), 0, 0, 0, 1, 0)
+            if 0 != int(r0) {
+                break
+            }
+            time.Sleep(100 * time.Millisecond)
+        }
+        return nil
+    }
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

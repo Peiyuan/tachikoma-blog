@@ -1,0 +1,2693 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Mysql on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/mysql/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Thu, 12 Jun 2014 22:32:00 UTC</updated>
+    
+    <item>
+      <title>测试Mysql临时表的复制</title>
+      <link>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-replication</link>
+      <pubDate>Thu, 12 Jun 2014 22:32:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-replication</guid>
+      <description>
+
+&lt;p&gt;测试一下Mysql 5.6.17对临时表的复制&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;参考资料&lt;/h2&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Percona这篇08年的blog &lt;a href=&#34;http://www.mysqlperformanceblog.com/2008/05/26/mysql-temporary-tables-safe-for-statement-based-replication/&#34;&gt;Can MySQL temporary tables be made safe for statement-based replication?&lt;/a&gt;, 是对于Mysql 5.1这方面的测试. 但根据对Mysql 5.6的相关测试, 其结论已经不适用. 其方法可供参考&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Mysql Manual 对于临时表复制的&lt;a href=&#34;http://dev.mysql.com/doc/refman/5.6/en/replication-features-temptables.html&#34;&gt;讨论&lt;/a&gt;, 其中一些重要的描述列在下面:&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Safe slave shutdown when using temporary tables&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;By default, all temporary tables are replicated; this happens whether or not there are any matching &lt;code&gt;--replicate-do-db&lt;/code&gt;, &lt;code&gt;--replicate-do-table&lt;/code&gt;, or &lt;code&gt;--replicate-wild-do-table&lt;/code&gt; options in effect&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;the &lt;code&gt;--replicate-ignore-table&lt;/code&gt; and &lt;code&gt;--replicate-wild-ignore-table&lt;/code&gt; options are honored for temporary tables&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;概述&lt;/h2&gt;
+
+&lt;p&gt;总共做了两个测试:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Mysql Manual中&amp;rdquo;Safe slave shutdown when using temporary tables&amp;rdquo;一节, 验证为何需要如此安全关闭slave&lt;/li&gt;
+&lt;li&gt;验证在复制临时表时, master意外crash, 是否会造成slave上的资源泄露&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;每个测试后都有结论&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;测试一&lt;/h2&gt;
+
+&lt;p&gt;针对Mysql Manual提到的&amp;rdquo;Safe slave shutdown when using temporary tables&amp;rdquo;, 重现一下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#准备环境, 断开复制
+mysql-master&amp;gt; select @@binlog_format;
++-----------------+
+| @@binlog_format |
++-----------------+
+| MIXED           |
++-----------------+
+1 row in set (0.02 sec)
+
+mysql-slave&amp;gt; stop slave;
+Query OK, 0 rows affected (0.03 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#在master上构造使用临时表的两个transaction
+mysql-master&amp;gt; flush logs;
+Query OK, 0 rows affected (0.02 sec)
+
+mysql-master&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-master&amp;gt; create temporary table test.t(t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql-master&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-master&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-master&amp;gt; insert into test.a select t from test.t;
+Query OK, 0 rows affected (0.00 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql-master&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#查看master的binlog
+mysql-master&amp;gt; show binlog events in &amp;quot;mysql-bin.000036&amp;quot; \G
+*************************** 1. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 4
+ Event_type: Format_desc
+  Server_id: 1
+End_log_pos: 120
+       Info: Server ver: 5.6.17-debug-log, Binlog ver: 4
+*************************** 2. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 120
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 195
+       Info: BEGIN
+*************************** 3. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 195
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 301
+       Info: create temporary table test.t(t int)
+*************************** 4. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 301
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 370
+       Info: COMMIT
+*************************** 5. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 370
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 445
+       Info: BEGIN
+*************************** 6. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 445
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 554
+       Info: insert into test.a select t from test.t
+*************************** 7. row ***************************
+   Log_name: mysql-bin.000036
+        Pos: 554
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 623
+       Info: COMMIT
+7 rows in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#开启复制,让复制在两个transaction之间中断
+
+mysql-slave&amp;gt; start slave until master_log_file=&#39;mysql-bin.000036&#39;, master_log_pos=370;
+Query OK, 0 rows affected, 1 warning (0.02 sec)
+
+mysql-slave&amp;gt; show slave status\G
+*************************** 1. row ***************************
+               Slave_IO_State: Waiting for master to send event
+...
+              Master_Log_File: mysql-bin.000036
+          Read_Master_Log_Pos: 623
+...
+        Relay_Master_Log_File: mysql-bin.000036
+             Slave_IO_Running: Yes
+            Slave_SQL_Running: No
+...
+          Exec_Master_Log_Pos: 370
+...
+1 row in set (0.00 sec)
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#查看slave正在使用的临时表, 并重启slave
+
+mysql-slave&amp;gt; show status like &#39;%temp%&#39;;                      
++------------------------+-------+
+| Variable_name          | Value |
++------------------------+-------+
+| Slave_open_temp_tables | 1     |
++------------------------+-------+
+1 row in set (0.01 sec)
+
+slave&amp;gt; service mysqld restart
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#验证slave status
+
+
+mysql-slave&amp;gt; show slave status\G
+*************************** 1. row ***************************
+...
+              Master_Log_File: mysql-bin.000036
+          Read_Master_Log_Pos: 623
+...
+        Relay_Master_Log_File: mysql-bin.000036
+             Slave_IO_Running: Yes
+            Slave_SQL_Running: No
+...
+                   Last_Errno: 1146
+                   Last_Error: Error &#39;Table &#39;test.t&#39; doesn&#39;t exist&#39; on query. Default database: &#39;&#39;. Query: &#39;insert into test.a select t from test.t&#39;
+...
+          Exec_Master_Log_Pos: 370
+...
+               Last_SQL_Errno: 1146
+               Last_SQL_Error: Error &#39;Table &#39;test.t&#39; doesn&#39;t exist&#39; on query. Default database: &#39;&#39;. Query: &#39;insert into test.a select t from test.t&#39;
+  Replicate_Ignore_Server_Ids:
+...
+1 row in set (0.00 sec)
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;结论&lt;/strong&gt;: 使用临时表时, slave并不保证crash-safe, 而且若在连续的transaction中复用同一个临时表, 完全没办法安全修复.&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;测试2&lt;/h2&gt;
+
+&lt;p&gt;对于一个&lt;code&gt;create temporary table&lt;/code&gt;, 已知&lt;code&gt;drop temporary table&lt;/code&gt;会在session结束时写进binlog. 那么如果master意外退出, 是不是会对slave造成资源泄露? 比如不释放文件句柄&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#准备master环境
+mysql-master&amp;gt; select @@binlog_format;
++-----------------+
+| @@binlog_format |
++-----------------+
+| MIXED           |
++-----------------+
+1 row in set (0.00 sec)
+
+mysql-master&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#检查slave上的资源
+mysql-slave&amp;gt; show status like &#39;%open%&#39;;
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 6     |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 164   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 0     |
+...
++----------------------------+-------+
+14 rows in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#在master上创建5张临时表
+mysql-master&amp;gt; create temporary table test.t1 (t int);create temporary table test.t2 (t int);create temporary table test.t3 (t int);create temporary table test.t4 (t int);create temporary table test.t5 (t int);
+Query OK, 0 rows affected (0.02 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#检查slave上的资源
+mysql-slave&amp;gt; show status like &#39;%open%&#39;;
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 11    |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 179   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 5     |
+...
++----------------------------+-------+
+14 rows in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#引发master故障, 重启master库
+master&amp;gt; pkill -9 mysqld
+master&amp;gt; /opt/mysql/bin/mysqld_safe &amp;amp;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#重启slave复制, 检查slave上的资源
+
+mysql-slave&amp;gt; stop slave io_thread;
+Query OK, 0 rows affected (0.02 sec)
+
+mysql-slave&amp;gt; start slave io_thread;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-slave&amp;gt; show status like &#39;%open%&#39;;
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 6     |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 209   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 5     |
+...
++----------------------------+-------+
+14 rows in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;#在master上再次创建5张临时表, 检查slave上的资源
+mysql-master&amp;gt; create temporary table test.t1 (t int);create temporary table test.t2 (t int);create temporary table test.t3 (t int);create temporary table test.t4 (t int);create temporary table test.t5 (t int);
+Query OK, 0 rows affected (0.09 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.02 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+
+mysql-slave&amp;gt; show status like &#39;%open%&#39;;
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+...
+| Innodb_num_open_files      | 11    |
+| Open_files                 | 22    |
+| Open_streams               | 0     |
+| Open_table_definitions     | 70    |
+| Open_tables                | 63    |
+| Opened_files               | 224   |
+| Opened_table_definitions   | 0     |
+| Opened_tables              | 0     |
+| Slave_open_temp_tables     | 10    |
+...
++----------------------------+-------+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;结论&lt;/strong&gt;: 复制临时表时,slave上消耗的资源, &lt;code&gt;Innodb_num_open_files&lt;/code&gt;会及时回收,也就是说实际消耗的系统资源被及时回收. 但&lt;code&gt;Slave_open_temp_tables&lt;/code&gt;会虚高不下,按照Mysql Manual中&amp;rdquo;Safe slave shutdown when using temporary tables&amp;rdquo;的叙述, 用&lt;code&gt;Slave_open_temp_tables&lt;/code&gt;来判断关闭server的时机时, 会出现判断失误.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>测试Mysql临时表的binlog</title>
+      <link>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-binlog</link>
+      <pubDate>Thu, 12 Jun 2014 22:30:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-06-12-temporary-table-binlog</guid>
+      <description>
+
+&lt;p&gt;在Mysql 5.6.17上测试临时表生成的binlog&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;测试用例&lt;/h2&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;td&gt;用例&lt;/td&gt;
+&lt;td&gt;row&lt;/td&gt;
+&lt;td&gt;statement&lt;/td&gt;
+&lt;td&gt;mixed&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;create temporary table&lt;/code&gt; 产生的binlog&lt;/td&gt;
+&lt;td&gt;1.1&lt;/td&gt;
+&lt;td&gt;1.2&lt;/td&gt;
+&lt;td&gt;1.3&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;create temporary table&lt;/code&gt; 产生的binlog (&lt;code&gt;mysqlbinlog&lt;/code&gt;)&lt;/td&gt;
+&lt;td&gt;2.1&lt;/td&gt;
+&lt;td&gt;2.2&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;临时表对非临时表数据产生影响时, 产生的binlog&lt;/td&gt;
+&lt;td&gt;3.1&lt;/td&gt;
+&lt;td&gt;3.2&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;临时表对非临时表数据产生影响, 并rollback时, 产生的binlog&lt;/td&gt;
+&lt;td&gt;4.1&lt;/td&gt;
+&lt;td&gt;4.2&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;多session同时创建临时表, 产生的binlog&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;5.1&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;开启&lt;code&gt;enforce-gtid-consistency&lt;/code&gt;时, &lt;code&gt;create temporary table&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;6.1&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;测试结论&lt;/h2&gt;
+
+&lt;p&gt;.1. &lt;code&gt;create temporary table&lt;/code&gt; 产生的binlog&lt;/p&gt;
+
+&lt;p&gt;结论: 可以看到&lt;code&gt;statement&lt;/code&gt;和&lt;code&gt;mixed&lt;/code&gt;模式生成的binlog一样. 而&lt;code&gt;row&lt;/code&gt;模式中, 因为临时表并没有产生实际影响, 所以没有产生额外的binlog event&lt;/p&gt;
+
+&lt;p&gt;.2. &lt;code&gt;create temporary table&lt;/code&gt; 产生的binlog (&lt;code&gt;mysqlbinlog&lt;/code&gt;)&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;show binlog events&lt;/code&gt; 的输出只是摘要了binlog的内容, &lt;code&gt;mysqlbinlog&lt;/code&gt;的输出才能精准的显示binlog的内容&lt;/p&gt;
+
+&lt;p&gt;重做&lt;code&gt;row&lt;/code&gt;模式和&lt;code&gt;statement&lt;/code&gt;模式的测试, 可以看到&lt;code&gt;row&lt;/code&gt;模式虽然不产生&lt;code&gt;create temporary table&lt;/code&gt;, 但是会产生一个&lt;code&gt;drop temporary table if exists&lt;/code&gt;; &lt;code&gt;statement&lt;/code&gt;模式产生&lt;code&gt;create temporary table&lt;/code&gt;, 但不产生&lt;code&gt;drop temporary table&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;.3. 临时表对非临时表数据产生影响时, 产生的binlog&lt;/p&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;row&lt;/code&gt;模式会产生非临时表的行日志.&lt;code&gt;statement&lt;/code&gt;模式会严格记录语句.&lt;/p&gt;
+
+&lt;p&gt;.4. 临时表对非临时表数据产生影响,并rollback时, 产生的binlog&lt;/p&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;row&lt;/code&gt;模式下, rollback不会对binlog产生影响. 在&lt;code&gt;statement&lt;/code&gt;模式下, 所有的语句都会如实反映在binlog里, 并进行rollback&lt;/p&gt;
+
+&lt;p&gt;.5. 多session同时创建临时表, 产生的binlog&lt;/p&gt;
+
+&lt;p&gt;不同于典型DDL, &lt;code&gt;create temporary table&lt;/code&gt;记在transaction中.&lt;/p&gt;
+
+&lt;p&gt;由session结束产生的&lt;code&gt;drop temporary table&lt;/code&gt;则类似于典型的DDL.&lt;/p&gt;
+
+&lt;p&gt;.6. 开启&lt;code&gt;enforce-gtid-consistency&lt;/code&gt;时, &lt;code&gt;create temporary table&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;开启&lt;code&gt;enforce-gtid-consistency&lt;/code&gt;时, 在transaction内创建临时表会得到warning:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;ERROR 1787 (HY000): When @@GLOBAL.ENFORCE_GTID_CONSISTENCY = 1, the statements CREATE TEMPORARY TABLE and DROP TEMPORARY TABLE can be executed in a non-transactional context only, and require that AUTOCOMMIT = 1.
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;hr /&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;元日志&lt;/h2&gt;
+
+&lt;p&gt;.1.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;row&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; show binlog events in &#39;mysql-bin.000014&#39; \G
+*************************** 1. row ***************************
+   Log_name: mysql-bin.000014
+        Pos: 4
+ Event_type: Format_desc
+  Server_id: 1
+End_log_pos: 120
+       Info: Server ver: 5.6.17-debug-log, Binlog ver: 4
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.1.2&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
+
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;statement&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; show binlog events in &#39;mysql-bin.000015&#39; \G
+*************************** 1. row ***************************
+   Log_name: mysql-bin.000015
+        Pos: 4
+ Event_type: Format_desc
+  Server_id: 1
+End_log_pos: 120
+       Info: Server ver: 5.6.17-debug-log, Binlog ver: 4
+*************************** 2. row ***************************
+   Log_name: mysql-bin.000015
+        Pos: 120
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 195
+       Info: BEGIN
+*************************** 3. row ***************************
+   Log_name: mysql-bin.000015
+        Pos: 195
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 302
+       Info: create temporary table test.t (t int)
+*************************** 4. row ***************************
+   Log_name: mysql-bin.000015
+        Pos: 302
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 371
+       Info: COMMIT
+4 rows in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.1.3&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.01 sec)
+
+mysql&amp;gt; select @@binlog_format;
++-----------------+
+| @@binlog_format |
++-----------------+
+| MIXED           |
++-----------------+
+1 row in set (0.01 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.02 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.05 sec)
+
+mysql&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; show binlog events in &#39;mysql-bin.000011&#39;\G
+*************************** 1. row ***************************
+   Log_name: mysql-bin.000011
+        Pos: 4
+ Event_type: Format_desc
+  Server_id: 1
+End_log_pos: 120
+       Info: Server ver: 5.6.17-debug-log, Binlog ver: 4
+*************************** 2. row ***************************
+   Log_name: mysql-bin.000011
+        Pos: 120
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 195
+       Info: BEGIN
+*************************** 3. row ***************************
+   Log_name: mysql-bin.000011
+        Pos: 195
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 302
+       Info: create temporary table test.t (t int)
+*************************** 4. row ***************************
+   Log_name: mysql-bin.000011
+        Pos: 302
+ Event_type: Query
+  Server_id: 1
+End_log_pos: 371
+       Info: COMMIT
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.2.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000014
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  4:38:58 server id 1  end_log_pos 120 CRC32 0xb935033a  Start: binlog v 4, server v 5.6.17-debug-log created 140612  4:38:58
+# at 120
+#140612  4:42:30 server id 1  end_log_pos 257 CRC32 0x8f9ccf27  Query   thread_id=2 exec_time=0 error_code=0
+SET TIMESTAMP=1402548150/*!*/;
+SET @@session.pseudo_thread_id=2/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+DROP TEMPORARY TABLE IF EXISTS `test`.`t` /* generated by server */
+/*!*/;
+# at 257
+#140612  4:42:51 server id 1  end_log_pos 304 CRC32 0x62766a77  Rotate to mysql-bin.000015  pos: 4
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.2.2&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000015
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  4:42:51 server id 1  end_log_pos 120 CRC32 0xc3707cb7  Start: binlog v 4, server v 5.6.17-debug-log created 140612  4:42:51
+# Warning: this binlog is either in use or was not closed properly.
+# at 120
+#140612  4:42:58 server id 1  end_log_pos 195 CRC32 0x2fd0ed95  Query   thread_id=2 exec_time=0 error_code=0
+SET TIMESTAMP=1402548178/*!*/;
+SET @@session.pseudo_thread_id=2/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+BEGIN
+/*!*/;
+# at 195
+#140612  4:42:58 server id 1  end_log_pos 302 CRC32 0xfc742b50  Query   thread_id=2 exec_time=0 error_code=0
+SET TIMESTAMP=1402548178/*!*/;
+create temporary table test.t (t int)
+/*!*/;
+# at 302
+#140612  4:43:00 server id 1  end_log_pos 371 CRC32 0x25648832  Query   thread_id=2 exec_time=0 error_code=0
+SET TIMESTAMP=1402548180/*!*/;
+COMMIT
+/*!*/;
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.3.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;row&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt;  create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; insert into test.t values(2);
+Query OK, 1 row affected (0.00 sec)
+
+mysql&amp;gt; insert into test.a select t from test.t;
+Query OK, 1 row affected (0.00 sec)
+Records: 1  Duplicates: 0  Warnings: 0
+
+mysql&amp;gt; commit;
+Query OK, 0 rows affected (0.01 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows -v mysql-bin.000020
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  6:02:38 server id 1  end_log_pos 120 CRC32 0x31b6357c  Start: binlog v 4, server v 5.6.17-debug-log created 140612  6:02:38
+# Warning: this binlog is either in use or was not closed properly.
+# at 120
+#140612  6:02:53 server id 1  end_log_pos 188 CRC32 0x23bceabc  Query   thread_id=6 exec_time=0 error_code=0
+SET TIMESTAMP=1402552973/*!*/;
+SET @@session.pseudo_thread_id=6/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+BEGIN
+/*!*/;
+# at 188
+#140612  6:02:53 server id 1  end_log_pos 232 CRC32 0x1a87cc74  Table_map: `test`.`a` mapped to number 70
+# at 232
+#140612  6:02:53 server id 1  end_log_pos 272 CRC32 0xf0c862fb  Write_rows: table id 70 flags: STMT_END_F
+### INSERT INTO `test`.`a`
+### SET
+###   @1=2
+# at 272
+#140612  6:02:55 server id 1  end_log_pos 303 CRC32 0xb2f66e82  Xid = 92
+COMMIT/*!*/;
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.3.2&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;statement&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; insert into test.t values(3);
+Query OK, 1 row affected (0.00 sec)
+
+mysql&amp;gt; insert into test.a select t from test.t;
+Query OK, 1 row affected (0.00 sec)
+Records: 1  Duplicates: 0  Warnings: 0
+
+mysql&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000021
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  6:07:43 server id 1  end_log_pos 120 CRC32 0xbcd985c3  Start: binlog v 4, server v 5.6.17-debug-log created 140612  6:07:43
+# Warning: this binlog is either in use or was not closed properly.
+# at 120
+#140612  6:07:50 server id 1  end_log_pos 195 CRC32 0xf5ea27f6  Query   thread_id=7 exec_time=0 error_code=0
+SET TIMESTAMP=1402553270/*!*/;
+SET @@session.pseudo_thread_id=7/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+BEGIN
+/*!*/;
+# at 195
+#140612  6:07:50 server id 1  end_log_pos 302 CRC32 0xa52fbe74  Query   thread_id=7 exec_time=0 error_code=0
+SET TIMESTAMP=1402553270/*!*/;
+create temporary table test.t (t int)
+/*!*/;
+# at 302
+#140612  6:07:55 server id 1  end_log_pos 400 CRC32 0x037b8754  Query   thread_id=7 exec_time=0 error_code=0
+SET TIMESTAMP=1402553275/*!*/;
+insert into test.t values(3)
+/*!*/;
+# at 400
+#140612  6:07:59 server id 1  end_log_pos 509 CRC32 0xa1dc2124  Query   thread_id=7 exec_time=0 error_code=0
+SET TIMESTAMP=1402553279/*!*/;
+insert into test.a select t from test.t
+/*!*/;
+# at 509
+#140612  6:08:01 server id 1  end_log_pos 540 CRC32 0xf7e3aa59  Xid = 102
+COMMIT/*!*/;
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.4.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;row&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; insert into test.t values(5);
+Query OK, 1 row affected (0.01 sec)
+
+mysql&amp;gt; insert into test.a select t from test.t;
+Query OK, 1 row affected (0.00 sec)
+Records: 1  Duplicates: 0  Warnings: 0
+
+mysql&amp;gt; rollback;
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+mysql&amp;gt; show warnings;
++---------+------+-----------------------------------------------------------------+
+| Level   | Code | Message                                                         |
++---------+------+-----------------------------------------------------------------+
+| Warning | 1751 | The creation of some temporary tables could not be rolled back. |
++---------+------+-----------------------------------------------------------------+
+1 row in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000024
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  6:25:58 server id 1  end_log_pos 120 CRC32 0x8f8f4247  Start: binlog v 4, server v 5.6.17-debug-log created 140612  6:25:58
+# Warning: this binlog is either in use or was not closed properly.
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.4.2&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@gtid_mode;
++-------------+
+| @@gtid_mode |
++-------------+
+| OFF         |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; set @@session.binlog_format=&amp;quot;statement&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; flush logs;
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t (t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql&amp;gt; insert into test.t values(4);
+Query OK, 1 row affected (0.00 sec)
+
+mysql&amp;gt; insert into test.a select t from test.t;
+Query OK, 1 row affected (0.00 sec)
+Records: 1  Duplicates: 0  Warnings: 0
+
+mysql&amp;gt; rollback;
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+mysql&amp;gt; show warnings;
++---------+------+-----------------------------------------------------------------+
+| Level   | Code | Message                                                         |
++---------+------+-----------------------------------------------------------------+
+| Warning | 1751 | The creation of some temporary tables could not be rolled back. |
++---------+------+-----------------------------------------------------------------+
+1 row in set (0.00 sec)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000023
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  6:22:03 server id 1  end_log_pos 120 CRC32 0x8ebd7db6  Start: binlog v 4, server v 5.6.17-debug-log created 140612  6:22:03
+# Warning: this binlog is either in use or was not closed properly.
+# at 120
+#140612  6:22:13 server id 1  end_log_pos 195 CRC32 0x2ef37ea7  Query   thread_id=9 exec_time=0 error_code=0
+SET TIMESTAMP=1402554133/*!*/;
+SET @@session.pseudo_thread_id=9/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+BEGIN
+/*!*/;
+# at 195
+#140612  6:22:13 server id 1  end_log_pos 302 CRC32 0xc642d4a1  Query   thread_id=9 exec_time=0 error_code=0
+SET TIMESTAMP=1402554133/*!*/;
+create temporary table test.t (t int)
+/*!*/;
+# at 302
+#140612  6:22:17 server id 1  end_log_pos 400 CRC32 0x076861c4  Query   thread_id=9 exec_time=0 error_code=0
+SET TIMESTAMP=1402554137/*!*/;
+insert into test.t values(4)
+/*!*/;
+# at 400
+#140612  6:22:21 server id 1  end_log_pos 509 CRC32 0x2e43db50  Query   thread_id=9 exec_time=0 error_code=0
+SET TIMESTAMP=1402554141/*!*/;
+insert into test.a select t from test.t
+/*!*/;
+# at 509
+#140612  6:22:24 server id 1  end_log_pos 580 CRC32 0xdefa8f3d  Query   thread_id=9 exec_time=0 error_code=0
+SET TIMESTAMP=1402554144/*!*/;
+ROLLBACK
+/*!*/;
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.5.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql-session1&amp;gt; set @@session.binlog_format=&amp;quot;statement&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session2&amp;gt; set @@session.binlog_format=&amp;quot;statement&amp;quot;;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session1&amp;gt; flush logs;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session1&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session1&amp;gt; create temporary table test.t(t int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql-session2&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session2&amp;gt; create temporary table test.t(t int);
+Query OK, 0 rows affected (0.02 sec)
+
+mysql-session1&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session2&amp;gt; commit;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql-session1&amp;gt; exit;
+Bye
+
+mysql-session2&amp;gt; exit;
+Bye
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;
+[root@localhost data]# /opt/mysql/bin/mysqlbinlog --base64-output=decode-rows mysql-bin.000028
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
+/*!40019 SET @@session.max_insert_delayed_threads=0*/;
+/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
+DELIMITER /*!*/;
+# at 4
+#140612  6:45:24 server id 1  end_log_pos 120 CRC32 0x0ad8e5a0  Start: binlog v 4, server v 5.6.17-debug-log created 140612  6:45:24
+# Warning: this binlog is either in use or was not closed properly.
+# at 120
+#140612  6:45:58 server id 1  end_log_pos 195 CRC32 0x59b581d0  Query   thread_id=14    exec_time=0 error_code=0
+SET TIMESTAMP=1402555558/*!*/;
+SET @@session.pseudo_thread_id=14/*!*/;
+SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
+SET @@session.sql_mode=1075838976/*!*/;
+SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
+/*!\C utf8 *//*!*/;
+SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
+SET @@session.lc_time_names=0/*!*/;
+SET @@session.collation_database=DEFAULT/*!*/;
+BEGIN
+/*!*/;
+# at 195
+#140612  6:45:58 server id 1  end_log_pos 301 CRC32 0x274004b9  Query   thread_id=14    exec_time=0 error_code=0
+SET TIMESTAMP=1402555558/*!*/;
+create temporary table test.t(t int)
+/*!*/;
+# at 301
+#140612  6:46:54 server id 1  end_log_pos 370 CRC32 0x9f2ca921  Query   thread_id=14    exec_time=0 error_code=0
+SET TIMESTAMP=1402555614/*!*/;
+COMMIT
+/*!*/;
+# at 370
+#140612  6:46:17 server id 1  end_log_pos 445 CRC32 0x3f1094c3  Query   thread_id=16    exec_time=0 error_code=0
+SET TIMESTAMP=1402555577/*!*/;
+SET @@session.pseudo_thread_id=16/*!*/;
+BEGIN
+/*!*/;
+# at 445
+#140612  6:46:17 server id 1  end_log_pos 551 CRC32 0x754cae85  Query   thread_id=16    exec_time=0 error_code=0
+SET TIMESTAMP=1402555577/*!*/;
+create temporary table test.t(t int)
+/*!*/;
+# at 551
+#140612  6:46:58 server id 1  end_log_pos 620 CRC32 0x73eb6f5a  Query   thread_id=16    exec_time=0 error_code=0
+SET TIMESTAMP=1402555618/*!*/;
+COMMIT
+/*!*/;
+# at 620
+#140612  6:47:22 server id 1  end_log_pos 733 CRC32 0xb4c3b1c0  Query   thread_id=14    exec_time=0 error_code=0
+use `test`/*!*/;
+SET TIMESTAMP=1402555642/*!*/;
+SET @@session.pseudo_thread_id=14/*!*/;
+DROP /*!40005 TEMPORARY */ TABLE IF EXISTS `t`
+/*!*/;
+# at 733
+#140612  6:47:38 server id 1  end_log_pos 846 CRC32 0x1287fb24  Query   thread_id=16    exec_time=0 error_code=0
+SET TIMESTAMP=1402555658/*!*/;
+SET @@session.pseudo_thread_id=16/*!*/;
+DROP /*!40005 TEMPORARY */ TABLE IF EXISTS `t`
+/*!*/;
+DELIMITER ;
+# End of log file
+ROLLBACK /* added by mysqlbinlog */;
+/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
+/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.6.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql&amp;gt; select @@GTID_MODE;
++-------------+
+| @@GTID_MODE |
++-------------+
+| ON          |
++-------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; select @@enforce_gtid_consistency;
++----------------------------+
+| @@enforce_gtid_consistency |
++----------------------------+
+|                          1 |
++----------------------------+
+1 row in set (0.00 sec)
+
+mysql&amp;gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&amp;gt; create temporary table test.t(t int);
+ERROR 1787 (HY000): When @@GLOBAL.ENFORCE_GTID_CONSISTENCY = 1, the statements CREATE TEMPORARY TABLE and DROP TEMPORARY TABLE can be executed in a non-transactional context only, and require that AUTOCOMMIT = 1.
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>对mysql table cache的理解</title>
+      <link>http://ikarishinjieva.github.io/post/2014-05-15-mysql-table-cache</link>
+      <pubDate>Thu, 15 May 2014 20:59:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-05-15-mysql-table-cache</guid>
+      <description>
+
+&lt;p&gt;最近读了mysql table_cache部分的一些代码.&lt;/p&gt;
+
+&lt;p&gt;首先推荐这篇&lt;a href=&#34;http://blog.sina.com.cn/s/blog_4673e60301010r5u.html&#34;&gt;导读&lt;/a&gt;, 写的比较详尽. 不对其中已有的部分进行重复, 仅记录自己的一些理解.&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;最简单的功能&lt;/h2&gt;
+
+&lt;p&gt;叫做table_cache, 就是对&lt;code&gt;table&lt;/code&gt;做擦车(cache).&lt;/p&gt;
+
+&lt;p&gt;其中&lt;code&gt;table&lt;/code&gt;是指的mysql打开的表的描述结构(descriptor)(&lt;a href=&#34;http://osxr.org/mysql/source/sql/table.h#0974&#34;&gt;&lt;code&gt;TABLE&lt;/code&gt;&lt;/a&gt;),  简单理解就是mysql要操作一张表时, 就会先打开其descriptor, 打开后读取其中信息, 然后进行操作.&lt;/p&gt;
+
+&lt;p&gt;为了快速访问, cache 往往类似于 Hash. table_cache 的 key 是
+    db_name + table_name
+table_cache 的 value 是 descriptor 的集合, 即 &lt;a href=&#34;http://osxr.org/mysql/source/sql/table_cache.h#0208&#34;&gt;&lt;code&gt;Table_cache_element&lt;/code&gt;&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;value 是 descriptor 的集合而不是 descriptor, 是因为对于同一张表, 在cache中同时会打开多个 descriptor&lt;/p&gt;
+
+&lt;p&gt;额外一提, table_cache是按线程号分桶的, 参看&lt;code&gt;Table_cache_manager&lt;/code&gt;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;进一步, 留下被回收的元素&lt;/h2&gt;
+
+&lt;p&gt;传统擦车, 不用的元素就直接回收了. table_cache暂存了不用的元素, 提高命中率.&lt;/p&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;Table_cache_element&lt;/code&gt;一共两个列表:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;used_tables&lt;/li&gt;
+&lt;li&gt;free_tables&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;进一步, 抽出共同的部分&lt;/h2&gt;
+
+&lt;p&gt;同一张表的多个 descriptor, 会有公共部分, 抽出这些公共部分, 能有效节省资源.&lt;/p&gt;
+
+&lt;p&gt;比如&lt;code&gt;mem_root&lt;/code&gt; (个人称之为受管内存区), 此内存区管理着跟某表相关的一些数据结构, 且受mysqld的管制. 如果同一张表的每个 descriptor 都独立管理一篇内存, 会引起不必要的浪费.&lt;/p&gt;
+
+&lt;p&gt;抽出的公共部分称为&lt;a href=&#34;http://osxr.org/mysql/source/sql/table.h#0584&#34;&gt;&lt;code&gt;TABLE_SHARE&lt;/code&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;进一步, 公共部分也得擦车&lt;/h2&gt;
+
+&lt;p&gt;&lt;code&gt;TABLE_SHARE&lt;/code&gt; 也被擦车了, 其被回收的元素跟&lt;code&gt;TABLE&lt;/code&gt;一样也被擦车了.&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_4&#34;&gt;擦车的步骤&lt;/h2&gt;
+
+&lt;p&gt;简述擦车的步骤&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;在cache中查找&lt;code&gt;TABLE&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;如果找到&lt;code&gt;TABLE&lt;/code&gt;, 则成功&lt;/li&gt;
+&lt;li&gt;在cache中查找&lt;code&gt;TABLE_SHARE&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;如果找不到&lt;code&gt;TABLE_SHARE&lt;/code&gt;, 则生成一个&lt;/li&gt;
+&lt;li&gt;根据&lt;code&gt;TABLE_SHARE&lt;/code&gt;, 生成一个&lt;code&gt;TABLE&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;维护好cache&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;toc_5&#34;&gt;如果找不到&lt;code&gt;TABLE_SHARE&lt;/code&gt;&lt;/h2&gt;
+
+&lt;p&gt;参看&lt;a href=&#34;http://osxr.org/mysql/ident?_i=get_table_share_with_discover&#34;&gt;&lt;code&gt;get_table_share_with_discover&lt;/code&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;如果内存中找不到&lt;code&gt;TABLE_SHARE&lt;/code&gt;, 则向存储引擎查询, 如果存储引擎可以提供, 则进行&lt;a href=&#34;http://osxr.org/mysql/ident?_i=recover_from_failed_open&#34;&gt;discover&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_6&#34;&gt;关于死锁&lt;/h2&gt;
+
+&lt;p&gt;table_cache 里有很多代码是关于死锁的处理, 其一个主要原因是因为 mysql 分为了sql层和存储引擎层, MDL的死锁检测限于sql层, 存储引擎层自带死锁检测, 但一个死锁如果跨过两层, 则需要特殊处理&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>PREVIOUS_GTIDS_LOG_EVENT的格式</title>
+      <link>http://ikarishinjieva.github.io/post/2014-04-17-PREVIOUS_GTIDS_LOG_EVENT</link>
+      <pubDate>Thu, 17 Apr 2014 22:08:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-04-17-PREVIOUS_GTIDS_LOG_EVENT</guid>
+      <description>&lt;p&gt;并没找到特别好的对&lt;code&gt;PREVIOUS_GTIDS_LOG_EVENT&lt;/code&gt;格式的描述, 自己写一个&lt;/p&gt;
+
+&lt;p&gt;据下面这个例子, 是&lt;code&gt;mysqlbinlog&lt;/code&gt;的分析结果&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;# at 120
+#140417 15:50:36 server id 904898000  end_log_pos 311 CRC32 0x311ec069
+# Position  Timestamp   Type   Master ID        Size      Master Pos    Flags
+#       78 cc 87 4f 53   23   d0 a5 ef 35   bf 00 00 00   37 01 00 00   00 00
+#       8b 04 00 00 00 00 00 00 00  7e 23 40 1a c6 03 11 e3 |................|
+#       9b 8e 13 5e 10 e6 a0 5c fb  01 00 00 00 00 00 00 00 |................|
+#       ab 01 00 00 00 00 00 00 00  06 00 00 00 00 00 00 00 |................|
+#       bb 81 86 fc 1e c5 ff 11 e3  8d f9 e6 6c cf 50 db 66 |...........l.P.f|
+#       cb 01 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00 |................|
+#       db 0c 00 00 00 00 00 00 00  a6 ce 32 8c c6 02 11 e3 |..........2.....|
+#       eb 8e 0d e6 6c cf 50 db 66  01 00 00 00 00 00 00 00 |...l.P.f........|
+#       fb 01 00 00 00 00 00 00 00  07 00 00 00 00 00 00 00 |................|
+#      10b b7 00 99 20 c6 01 11 e3  8e 07 5e 10 e6 a0 5c fb |................|
+#      11b 01 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00 |................|
+#      12b 07 00 00 00 00 00 00 00  69 c0 1e 31             |........i..1|
+#      Previous-GTIDs
+# 7e23401a-c603-11e3-8e13-5e10e6a05cfb:1-5,
+# 8186fc1e-c5ff-11e3-8df9-e66ccf50db66:1-11,
+# a6ce328c-c602-11e3-8e0d-e66ccf50db66:1-6,
+# b7009920-c601-11e3-8e07-5e10e6a05cfb:1-6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;从78-8a的位置, 是Binlog Event header, 参看&lt;a href=&#34;http://dev.mysql.com/doc/internals/en/binlog-event-header.html&#34;&gt;这里&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;最后四个字节, (69 c0 1e 31) 是checksum, 与参数 &lt;a href=&#34;http://dev.mysql.com/doc/refman/5.6/en/replication-options-binary-log.html#option_mysqld_binlog-checksum&#34;&gt;binlog-checksum&lt;/a&gt; 有关&lt;/p&gt;
+
+&lt;p&gt;中间的部分, 是gtid的数据区, 格式如下:&lt;/p&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;td&gt;层次&lt;/td&gt;
+&lt;td&gt;字节数&lt;/td&gt;
+&lt;td&gt;含义&lt;/td&gt;
+&lt;td&gt;例子中的数值&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;0&lt;/td&gt;
+&lt;td&gt;8&lt;/td&gt;
+&lt;td&gt;GTID中sid-number的组数&lt;/td&gt;
+&lt;td&gt;例子中为四组&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;1&lt;/td&gt;
+&lt;td&gt;16&lt;/td&gt;
+&lt;td&gt;第一组sid-number的sid部分&lt;/td&gt;
+&lt;td&gt;例子中为(7e 23 40 1a c6 03 11 e3 9b 8e 13 5e 10 e6 a0 5c fb)&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;1&lt;/td&gt;
+&lt;td&gt;8&lt;/td&gt;
+&lt;td&gt;第一组sid-number中, internal numbers的个数&lt;/td&gt;
+&lt;td&gt;例子中为1个internal number (&lt;code&gt;1-5&lt;/code&gt;)&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;2&lt;/td&gt;
+&lt;td&gt;8&lt;/td&gt;
+&lt;td&gt;第一组sid-number中, 第一个internal number的起始number&lt;/td&gt;
+&lt;td&gt;例子中为&lt;code&gt;1&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;2&lt;/td&gt;
+&lt;td&gt;8&lt;/td&gt;
+&lt;td&gt;第一组sid-number中, 第一个internal number的结束number+1&lt;/td&gt;
+&lt;td&gt;例子中为&lt;code&gt;5+1=6&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;2&lt;/td&gt;
+&lt;td&gt;8&lt;/td&gt;
+&lt;td&gt;第一组sid-number中, 第二个internal number的起始number&lt;/td&gt;
+&lt;td&gt;&amp;hellip; (例子中没有第二个internal number)&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;2&lt;/td&gt;
+&lt;td&gt;8&lt;/td&gt;
+&lt;td&gt;第一组sid-number中, 第二个internal number的结束number+1&lt;/td&gt;
+&lt;td&gt;&amp;hellip; (例子中没有第二个internal number)&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;&amp;hellip;&lt;/td&gt;
+&lt;td&gt;&amp;hellip;&lt;/td&gt;
+&lt;td&gt;&amp;hellip;&lt;/td&gt;
+&lt;td&gt;&amp;hellip;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;1&lt;/td&gt;
+&lt;td&gt;16&lt;/td&gt;
+&lt;td&gt;第二组sid-number的sid部分&lt;/td&gt;
+&lt;td&gt;&amp;hellip;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;&amp;hellip;&lt;/td&gt;
+&lt;td&gt;&amp;hellip;&lt;/td&gt;
+&lt;td&gt;&amp;hellip;&lt;/td&gt;
+&lt;td&gt;&amp;hellip;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>MDL_map_partition中对锁的过渡</title>
+      <link>http://ikarishinjieva.github.io/post/2014-04-05-MDL_map_partition-lock-split</link>
+      <pubDate>Sat, 05 Apr 2014 11:43:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-04-05-MDL_map_partition-lock-split</guid>
+      <description>
+
+&lt;p&gt;在&lt;code&gt;MDL&lt;/code&gt;源码中有一段&lt;code&gt;MDL_map_partition&lt;/code&gt;中对锁的过渡有点意思, 拿出来分析一下&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;场景&lt;/h2&gt;
+
+&lt;p&gt;&lt;code&gt;MDL_map_partition&lt;/code&gt;是容纳&lt;code&gt;MDL_lock&lt;/code&gt;的一个容器, &lt;code&gt;MDL_lock&lt;/code&gt;可以简单的理解为一种锁.&lt;/p&gt;
+
+&lt;p&gt;那么场景问题是现在我要从锁容器&lt;code&gt;C&lt;/code&gt;中查找一个锁&lt;code&gt;L&lt;/code&gt;并加锁&lt;code&gt;L&lt;/code&gt;, 怎样做到多线程安全&lt;/p&gt;
+
+&lt;p&gt;场景中&lt;code&gt;C&lt;/code&gt;上有保护&lt;code&gt;C&lt;/code&gt;的锁&lt;code&gt;A&lt;/code&gt; (容器锁), &lt;code&gt;L&lt;/code&gt;上的锁为&lt;code&gt;B&lt;/code&gt; (成员锁) (此处做了简化, 实际上&lt;code&gt;MDL_lock&lt;/code&gt;并不是一个锁, 而是类似于条件变量, 而锁&lt;code&gt;B&lt;/code&gt;是保护&lt;code&gt;L&lt;/code&gt;的锁. 此处将&lt;code&gt;L&lt;/code&gt;简化为一把锁)&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;分析1&lt;/h2&gt;
+
+&lt;p&gt;最简单的方法, 就是&lt;code&gt;A&lt;/code&gt;加锁, &lt;code&gt;B&lt;/code&gt;加锁, &lt;code&gt;A&lt;/code&gt;解锁. 这种方法肯定不会有错, 但是并发性上会出现问题. 比如以下场景&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;线程T1持有&lt;code&gt;B&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;线程T2正在容器中查找&lt;code&gt;B&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;线程T3在同一个容器中查找另外一个&lt;code&gt;MDL_lock&lt;/code&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;T2先将&lt;code&gt;A&lt;/code&gt;加锁, 加锁&lt;code&gt;B&lt;/code&gt;时, 由于T1持有&lt;code&gt;B&lt;/code&gt;, T2被阻塞; T3在同一个容器中查找另一个不相关的成员, 先要加锁&lt;code&gt;A&lt;/code&gt;, &lt;code&gt;A&lt;/code&gt;被T2持有, T3被阻塞&lt;/p&gt;
+
+&lt;p&gt;因此, 这种做法的并发性很差&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;分析2&lt;/h2&gt;
+
+&lt;p&gt;提高并发性的关键是将&lt;code&gt;A&lt;/code&gt;锁过渡到&lt;code&gt;B&lt;/code&gt;锁, 比如这样: &lt;code&gt;A&lt;/code&gt;加锁, 查找&lt;code&gt;B&lt;/code&gt;, &lt;code&gt;A&lt;/code&gt;解锁, &lt;code&gt;B&lt;/code&gt;加锁.&lt;/p&gt;
+
+&lt;p&gt;这种方法解决了并发性, 但显而易见形成了一个无锁区 (从&lt;code&gt;A&lt;/code&gt;解锁到&lt;code&gt;B&lt;/code&gt;加锁这个区域). 如果在无锁区另一个线程将&lt;code&gt;B&lt;/code&gt;销毁或移出容器, 那么后面的&lt;code&gt;B&lt;/code&gt;加锁操作就会悲剧&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;分析3&lt;/h2&gt;
+
+&lt;p&gt;面对无锁区的问题, 可以试着加&lt;code&gt;version&lt;/code&gt;(版本变量)来解决, 规则如下:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;任何将成员移入/移出容器的情况, 都需要获得容器锁&lt;code&gt;A&lt;/code&gt;和成员锁&lt;code&gt;B&lt;/code&gt;, 并在元素&lt;code&gt;version&lt;/code&gt;上加1&lt;/li&gt;
+&lt;li&gt;对成员的销毁, 需要先将成员移出容器&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;这样, 查找成员的流程变为:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;线程T1, 对&lt;code&gt;A&lt;/code&gt;加锁, 找到&lt;code&gt;B&lt;/code&gt;, 记录&lt;code&gt;B&lt;/code&gt;的&lt;code&gt;version&lt;/code&gt;, 记为v1. 对&lt;code&gt;A&lt;/code&gt;解锁&lt;/li&gt;
+&lt;li&gt;线程T2, &lt;code&gt;B&lt;/code&gt;销毁或移出容器, 需要获得&lt;code&gt;A&lt;/code&gt;和&lt;code&gt;B&lt;/code&gt;锁, 对&lt;code&gt;version&lt;/code&gt;加1, 记为v2&lt;/li&gt;
+&lt;li&gt;线程T1, 等到T2释放&lt;code&gt;B&lt;/code&gt;锁后, 可获得&lt;code&gt;B&lt;/code&gt;锁, 发现&lt;code&gt;v1 != v2&lt;/code&gt;, 意味着成员可能在容器中已经被移出或销毁, 则需要重试整个过程&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;加入&lt;code&gt;version&lt;/code&gt;后, 对于销毁成员的场景, 并发性并没有改变 (因为仍然需要同时获得两把锁), 但对于查找成员的场景, 并发性和分析2一样&lt;/p&gt;
+
+&lt;p&gt;不幸的是, 这个场景仍然存在问题, 很容易看到其中一个逻辑问题, T1在T2销毁&lt;code&gt;B&lt;/code&gt;锁后, 还获得了&lt;code&gt;B&lt;/code&gt;锁. 也就是T2不能即刻销毁&lt;code&gt;B&lt;/code&gt;锁, 否则所有等待&lt;code&gt;B&lt;/code&gt;锁的线程都会悲剧. 那&lt;code&gt;B&lt;/code&gt;锁何时能被安全销毁&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_4&#34;&gt;分析4&lt;/h2&gt;
+
+&lt;p&gt;要解决分析3的问题, 可以在&lt;code&gt;B&lt;/code&gt;上添加引用计数, 细节如下:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;在成员未被移出容器时, 持有&lt;code&gt;A&lt;/code&gt;锁可以对成员引用计数&lt;code&gt;usage_count&lt;/code&gt;进行加1, 即在容器中查找成员时, 容器负责对成员的&lt;code&gt;usage_count&lt;/code&gt;加1&lt;/li&gt;
+&lt;li&gt;持有&lt;code&gt;B&lt;/code&gt;锁可以对自己的解引用计数&lt;code&gt;release_count&lt;/code&gt;进行加1, 即使用者在使用完&lt;code&gt;B&lt;/code&gt;后, 对&lt;code&gt;B&lt;/code&gt;进行解引用&lt;/li&gt;
+&lt;li&gt;如果&lt;code&gt;usage_count&lt;/code&gt; == &lt;code&gt;release_count&lt;/code&gt;, 则&lt;code&gt;B&lt;/code&gt;可以被安全销毁&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;usage_count&lt;/code&gt;和&lt;code&gt;release_count&lt;/code&gt;在分别在不同锁的保护下, 代入分析3的场景, 发现可以解决分析3的问题&lt;/p&gt;
+
+&lt;p&gt;还有一些需要说明的边界情况&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;在成员已经被移出容器后, 成员引用计数&lt;code&gt;usage_count&lt;/code&gt;不再受&lt;code&gt;A&lt;/code&gt;锁保护, 而是受&lt;code&gt;B&lt;/code&gt;锁保护. 相当于容器已经不再管理成员的引用计数&lt;/li&gt;
+&lt;li&gt;如何判断&amp;rdquo;成员已经被移出容器&amp;rdquo;, 可以在成员上添加状态量&lt;code&gt;is_removed_from_container&lt;/code&gt;, 读取此状态需要&lt;code&gt;A&lt;/code&gt;锁或&lt;code&gt;B&lt;/code&gt;锁, 修改此状态需要&lt;code&gt;A&lt;/code&gt;锁和&lt;code&gt;B&lt;/code&gt;锁.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&#34;toc_5&#34;&gt;Mysql的实现&lt;/h2&gt;
+
+&lt;p&gt;Mysql的实现和之前的分析大致相同, 给出映射表&lt;/p&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;td&gt;分析里的概念&lt;/td&gt;
+&lt;td&gt;Mysql的变量&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;版本变量&lt;code&gt;version&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_version&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;成员引用计数&lt;code&gt;usage_count&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_ref_usage&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;成员解引用计数&lt;code&gt;release_count&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_ref_release&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;状态量&lt;code&gt;is_removed_from_container&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;MDL_lock.m_is_destroyed&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;实现锁拆分的函数为&lt;code&gt;MDL_map_partition::move_from_hash_to_lock_mutex&lt;/code&gt;, 一看就懂&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>整理一下最近读的MDL源码</title>
+      <link>http://ikarishinjieva.github.io/post/2014-04-04-MDL</link>
+      <pubDate>Fri, 04 Apr 2014 20:00:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-04-04-MDL</guid>
+      <description>
+
+&lt;p&gt;以下都是个人理解, 如有疏漏请斧正
+另, 因为理解不深, 将忽略锁级别以及锁共享的细节&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;MDL&lt;/h2&gt;
+
+&lt;p&gt;MDL (Metadata lock), 除了正常的Condition var提供的功能外, 还额外提供了
+1. 不同的锁级别. 在不冲突的情况下, 允许共享资源
+2. 死锁检查和处理
+3. 记录等待状态, 是死锁检查的基础&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;模型&lt;/h2&gt;
+
+&lt;p&gt;&lt;code&gt;MDL_lock&lt;/code&gt; 表示Mysqld中的一个资源(库/表/&amp;hellip;) 存储在全局结构 &lt;code&gt;mdl_locks (MDL_map)&lt;/code&gt;中, &lt;code&gt;mdl_locks&lt;/code&gt;内有&lt;code&gt;m_partitions&lt;/code&gt; (锁的分区), 用来分散查找lock时的竞争&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;MDL_context&lt;/code&gt; 为MDL上下文接口, 表示一个资源竞争者, THD实现了这个接口, 即一个Mysqld的线程可以是&lt;code&gt;MDL_lock&lt;/code&gt;的资源竞争者&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;MDL_ticket&lt;/code&gt; 表示&lt;code&gt;MDL_lock&lt;/code&gt;的许可或请求, 会同时挂在两处:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;挂在所属&lt;code&gt;MDL_Context&lt;/code&gt;中, 通过&lt;code&gt;MDL_ticket.next_in_context/prev_in_context&lt;/code&gt;组织链表&lt;/li&gt;
+&lt;li&gt;挂在&lt;code&gt;MDL_lock&lt;/code&gt;的队列中, 通过&lt;code&gt;MDL_ticket.next_in_lock/prev_in_lock&lt;/code&gt;组织链表. &lt;code&gt;MDL_lock&lt;/code&gt;的队列分为两种, 一个&lt;code&gt;MDL_ticket&lt;/code&gt;可能会挂在其中之一
+
+&lt;ul&gt;
+&lt;li&gt;挂在&lt;code&gt;MDL_lock&lt;/code&gt;的等待队列(&lt;code&gt;MDL_lock.m_waiting&lt;/code&gt;)中, 表示&lt;code&gt;MDL_ticket&lt;/code&gt;的owner (&lt;code&gt;MDL_context&lt;/code&gt;)正在等待该资源(&lt;code&gt;MDL_lock&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;挂在&lt;code&gt;MDL_lock&lt;/code&gt;的已许可队列(&lt;code&gt;MDL_lock.m_granted&lt;/code&gt;)中, 表示&lt;code&gt;MDL_ticket&lt;/code&gt;的owner (&lt;code&gt;MDL_context&lt;/code&gt;)已经获得该资源(&lt;code&gt;MDL_lock&lt;/code&gt;)&lt;/li&gt;
+&lt;/ul&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;总结一下, &lt;code&gt;MDL_context&lt;/code&gt;和&lt;code&gt;MDL_ticket&lt;/code&gt;的关系是一对多, 一个竞争者可以同时申请/获得多个资源的许可; &lt;code&gt;MDL_ticket&lt;/code&gt;和&lt;code&gt;MDL_lock&lt;/code&gt;的关系是多对一, 可以同时有多个资源许可在竞争一个资源, 或者多个资源许可可以*有条件*地共享一个资源&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;如何获得锁&lt;/h2&gt;
+
+&lt;p&gt;简单分析&lt;code&gt;MDL_context::acquire_lock&lt;/code&gt;方法, 其主要流程是&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    bool MDL_context::acquire_lock(MDL_request *mdl_request, ulong lock_wait_timeout) {
+        ...
+        
+        try_acquire_lock_impl(...) 
+        //尝试不等待立刻获得资源, 如果成功直接返回
+        //以下是等待资源的处理
+        ...
+        lock-&amp;gt;m_waiting.add_ticket(ticket) 
+        //将一个资源申请`ticket`挂入资源`lock`的等待队列`m_waiting`
+        if (lock-&amp;gt;needs_notification(ticket)) {
+            //如果等待资源时需要通知状态, 则不断轮询并通知
+            //将忽略此处的细节
+            ...
+        } else {
+            //等待资源
+            //结果可能是获得资源, 或者超时, 或者异常 (比如被死锁检测机制判定死亡)
+            //`timed_wait`中的实现是等待COND(条件变量)`m_wait.m_COND_wait_status`
+            wait_status= m_wait.timed_wait(...);
+        }
+        //收尾处理
+        m_tickets[mdl_request-&amp;gt;duration].push_front(ticket)
+        //将资源申请`ticket`挂入`MDL_Context.m_tickets`
+        ...
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;记录等待状态&lt;/h2&gt;
+
+&lt;p&gt;之前提到了记录等待状态, 在&lt;code&gt;MDL_context::acquire_lock&lt;/code&gt;方法中可以看到如下代码 (上一节未列出)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    bool MDL_context::acquire_lock(MDL_request *mdl_request, ulong lock_wait_timeout) {
+        m_wait.reset_status();
+        ...
+        will_wait_for(ticket); //其中设置了`m_waiting_for`
+        if (lock-&amp;gt;needs_notification(ticket)) {
+            ...
+            //等待资源
+            wait_status= m_wait.timed_wait(m_owner, &amp;amp;abs_timeout, TRUE,
+                                      mdl_request-&amp;gt;key.get_wait_state_name());
+        } else {
+            //等待资源
+            wait_status= m_wait.timed_wait(m_owner, &amp;amp;abs_timeout, TRUE,
+                                      mdl_request-&amp;gt;key.get_wait_state_name());
+        }
+        done_waiting_for(); //其中清空了`m_waiting_for`
+        ...
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;MDL_context.m_wait&lt;/code&gt;是用来等待资源的工具类, 其中进行等待处理, 并记录等待资源的状态/结果.&lt;/p&gt;
+
+&lt;p&gt;还有一个&lt;code&gt;MDL_context.m_waiting_for&lt;/code&gt;也在记录&lt;code&gt;MDL_context&lt;/code&gt;正在进行的资源申请(&lt;code&gt;MDL_ticket&lt;/code&gt;), 其正在等待某个资源. 实际上&lt;code&gt;m_waiting_for&lt;/code&gt;是冗余的信息, 至于原因源代码中有解释, 此处不冗余说明&amp;hellip;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_4&#34;&gt;如何释放锁&lt;/h2&gt;
+
+&lt;p&gt;释放锁, 需要完成下面几个动作:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;将&lt;code&gt;ticket&lt;/code&gt;从&lt;code&gt;MDL_lock&lt;/code&gt;的数据结构上卸下来&lt;/li&gt;
+&lt;li&gt;调度选择新的锁占有者&lt;/li&gt;
+&lt;li&gt;将&lt;code&gt;ticket&lt;/code&gt;从&lt;code&gt;MDL_context&lt;/code&gt;的数据结构上卸下并回收&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;入口为&lt;code&gt;MDL_context::release_lock&lt;/code&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    void MDL_context::release_lock(enum_mdl_duration duration, MDL_ticket *ticket) 
+    {
+        ...
+        lock-&amp;gt;remove_ticket(&amp;amp;MDL_lock::m_granted, ticket) {
+            //将`ticket`从`MDL_lock`的数据结构上卸下来
+            (this-&amp;gt;*list).remove_ticket(ticket);
+            ...
+            //调度选择新的锁占有者
+            reschedule_waiters();
+        }()
+        
+        //将`ticket`从`MDL_context`的数据结构上卸下并回收
+        m_tickets[duration].remove(ticket);
+        MDL_ticket::destroy(ticket);
+        ...
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;下面说明调度的细节&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_5&#34;&gt;释放锁时的调度&lt;/h2&gt;
+
+&lt;p&gt;调度函数的入口是&lt;code&gt;MDL_lock::reschedule_waiters&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;最简单的调度就是从&lt;code&gt;MDL_lock.m_waiting&lt;/code&gt;队列中取出头元素, 直接将资源调度给头元素即可&lt;/p&gt;
+
+&lt;p&gt;Mysqld在此基础上添加了一个退让条件:
+如果资源连续被&lt;em&gt;高优先级&lt;/em&gt;(比如&lt;code&gt;SNW&lt;/code&gt;/&lt;code&gt;SNRW&lt;/code&gt;/&lt;code&gt;X&lt;/code&gt;锁类型)的&lt;code&gt;ticket&lt;/code&gt;获得, 那么退让一步, 允许资源间隔被调度给_低优先级_的&lt;code&gt;ticket&lt;/code&gt;防止其饿死.&lt;/p&gt;
+
+&lt;p&gt;用&lt;code&gt;MDL_lock::reschedule_waiters&lt;/code&gt;的代码说就是, 如果&lt;code&gt;MDL_lock&lt;/code&gt;被连续分配给&lt;code&gt;hog_lock_types_bitmap()&lt;/code&gt;中定义的_高优先级_类型的&lt;code&gt;ticket&lt;/code&gt;,连续的次数&lt;code&gt;m_hog_lock_count&lt;/code&gt;超过&lt;code&gt;max_write_lock_count&lt;/code&gt;, 那么开启退让条件, 批准第一个&lt;em&gt;非&lt;/em&gt;_高优先级_的&lt;code&gt;ticket&lt;/code&gt;获得资源&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_6&#34;&gt;死锁检测&lt;/h2&gt;
+
+&lt;p&gt;死锁检测的入口是&lt;code&gt;MDL_context::find_deadlock&lt;/code&gt;, 本身原理很简单, 但源码写的很复杂= =. 先说明原理, 再对应源码&lt;/p&gt;
+
+&lt;p&gt;设当前&lt;code&gt;MDL_context&lt;/code&gt;为图的一个节点&lt;code&gt;A&lt;/code&gt;, 从节点&lt;code&gt;A&lt;/code&gt;出发,  找到&lt;code&gt;A&lt;/code&gt;的正在等待的资源&lt;code&gt;L&lt;/code&gt;(&lt;code&gt;A.m_waiting_for.m_lock&lt;/code&gt;)中的&lt;code&gt;m_granted&lt;/code&gt;里的每一个&lt;code&gt;MDL_ticket&lt;/code&gt;对应的&lt;code&gt;MDL_context&lt;/code&gt; &lt;code&gt;B&lt;/code&gt;, 表示&lt;code&gt;A&lt;/code&gt;正在等待&lt;code&gt;B&lt;/code&gt;释放资源&lt;code&gt;L&lt;/code&gt;. 在图中&lt;code&gt;A&lt;/code&gt; -&amp;gt; &lt;code&gt;B&lt;/code&gt; 添加一条有向边&lt;/p&gt;
+
+&lt;p&gt;死锁检查的工作就是遍历这张有向图, 检查其是否存在环路&lt;/p&gt;
+
+&lt;p&gt;以&lt;code&gt;MDL_context::find_deadlock&lt;/code&gt;入口, 展开一些调用来说明代码&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    (MDL_context::find_deadlock)
+    while(1) {
+        visit_subgraph(visitor) {
+            m_waiting_for-&amp;gt;accept_visitor(visitor) {
+                m_lock-&amp;gt;visit_subgraph(this, visitor) {
+                    ...
+                }()
+            }()
+        }()
+        break if no deadlock
+        set deadlock victim
+        break if deadlock victim is current context
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到&lt;code&gt;find_deadlock&lt;/code&gt;以&lt;code&gt;MDL_context.m_waiting_for.m_lock&lt;/code&gt;为起始点, 不断遍历其有向图, 选出victim. 直到
+* 没有发现死锁
+* 或自己被选为victim&lt;/p&gt;
+
+&lt;p&gt;其使用一个visitor (&lt;code&gt;MDL_wait_for_graph_visitor&lt;/code&gt;) 贯穿遍历过程, 其记录了遍历的过程&lt;/p&gt;
+
+&lt;p&gt;再来看&lt;code&gt;MDL_lock::visit_subgraph&lt;/code&gt;, 此函数是以一个&lt;code&gt;MDL_lock&lt;/code&gt;为起点, 来遍历依赖图&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    MDL_lock::visit_subgraph(MDL_ticket *waiting_ticket, MDL_wait_for_graph_visitor *gvisitor) {
+    
+        //此处是因为MDL_context.m_waiting_for是冗余信息, 但无法保证更新同步, 带来的额外操作. 忽略此处细节
+        if (src_ctx-&amp;gt;m_wait.get_status() != MDL_wait::EMPTY) {...}
+        
+        //visitor用来记录遍历层次
+        //当遍历层次大于MAX_SEARCH_DEPTH(32), 也认为发现死锁
+        if (gvisitor-&amp;gt;enter_node(src_ctx)) {...}
+        
+        //由于现在是以一个资源(`MDL_lock`)为视角, 之后的检查为了效率, 遍历会从两个方向同时进行, 即检查节点的出度方向(`MDL_lock.m_granted`)和节点的入度方向(`MDL_lock.m_waiting`). 
+        
+        
+        //为了效率, 死锁检测会先检测距离为1的临近节点, 而先不深度遍历图
+        
+        while ((ticket= granted_it++))
+        {
+          if (ticket-&amp;gt;get_ctx() != src_ctx &amp;amp;&amp;amp;
+              ticket-&amp;gt;is_incompatible_when_granted(waiting_ticket-&amp;gt;get_type()) &amp;amp;&amp;amp;
+              gvisitor-&amp;gt;inspect_edge(ticket-&amp;gt;get_ctx()))
+          {
+            goto end_leave_node;
+          }
+        }
+
+        while ((ticket= waiting_it++))
+        {
+          /* Filter out edges that point to the same node. */
+          if (ticket-&amp;gt;get_ctx() != src_ctx &amp;amp;&amp;amp;
+              ticket-&amp;gt;is_incompatible_when_waiting(waiting_ticket-&amp;gt;get_type()) &amp;amp;&amp;amp;
+              gvisitor-&amp;gt;inspect_edge(ticket-&amp;gt;get_ctx()))
+          {
+            goto end_leave_node;
+          }
+        }
+        
+        //此处开始, 深度遍历图
+        
+        granted_it.rewind();
+        while ((ticket= granted_it++))
+        {
+          if (ticket-&amp;gt;get_ctx() != src_ctx &amp;amp;&amp;amp;
+              ticket-&amp;gt;is_incompatible_when_granted(waiting_ticket-&amp;gt;get_type()) &amp;amp;&amp;amp;
+              ticket-&amp;gt;get_ctx()-&amp;gt;visit_subgraph(gvisitor))
+          {
+            goto end_leave_node;
+          }
+        }
+        
+        waiting_it.rewind();
+        while ((ticket= waiting_it++))
+        {
+          if (ticket-&amp;gt;get_ctx() != src_ctx &amp;amp;&amp;amp;
+              ticket-&amp;gt;is_incompatible_when_waiting(waiting_ticket-&amp;gt;get_type()) &amp;amp;&amp;amp;
+              ticket-&amp;gt;get_ctx()-&amp;gt;visit_subgraph(gvisitor))
+          {
+            goto end_leave_node;
+          }
+        }
+        ...
+        
+        //visitor退栈
+        gvisitor-&amp;gt;leave_node(src_ctx);
+        ...
+    }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;发现死锁后, 会调用&lt;code&gt;Deadlock_detection_visitor::opt_change_victim_to&lt;/code&gt;, 其中进行&lt;code&gt;MDL_context&lt;/code&gt;权重比较, 来选取一个作为victim, 此处忽略细节&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>对Mysql bug #70307 的再学习</title>
+      <link>http://ikarishinjieva.github.io/post/2014-04-01-study-mysql-bug-70307-2</link>
+      <pubDate>Tue, 01 Apr 2014 13:07:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-04-01-study-mysql-bug-70307-2</guid>
+      <description>
+
+&lt;p&gt;之前对bug #70307有过&lt;a href=&#34;http://ikarishinjieva.github.io/blog/blog/2013/10/25/study-mysql-bug-70307/&#34;&gt;学习&lt;/a&gt;, 苦于阿兹海默状态, 又花了半天在mysql 5.5.33上探查这个场景的原因&amp;hellip;&lt;/p&gt;
+
+&lt;p&gt;简单记录一下&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;现象&lt;/h2&gt;
+
+&lt;p&gt;mysql进行主从复制, 从机上&lt;code&gt;FLUSH TABLES WITH READ LOCK&lt;/code&gt;后, 进行&lt;code&gt;STOP SLAVE&lt;/code&gt;, 一定概率下 &lt;code&gt;SHOW SLAVE STATUS&lt;/code&gt;卡住&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;重现步骤&lt;/h2&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;td&gt;master&lt;/td&gt;
+&lt;td&gt;slave client 1&lt;/td&gt;
+&lt;td&gt;slave client 2&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;STOP SLAVE IO_THREAD&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;CREATE TABLE TEST.TEST &amp;hellip;&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;FLUSH TABLES WITH READ LOCK&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;START SLAVE IO_THREAD&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;STOP SLAVE&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;td&gt;SHOW SLAVE STATUS&lt;/td&gt;
+&lt;td&gt;-&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;其中, &lt;code&gt;START/STOP SLAVE IO_THREAD&lt;/code&gt;是为了在&lt;code&gt;FLUSH TABLES WITH READ LOCK&lt;/code&gt;时造成slave io_thread有未提交数据&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;死锁原因&lt;/h2&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;code&gt;FLUSH TABLES WITH READ LOCK&lt;/code&gt; 会阻塞IO_THREAD提交数据&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;STOP SLAVE&lt;/code&gt;会等待IO_THREAD结束 (&lt;code&gt;mi-&amp;gt;stop_cond&lt;/code&gt;), 即&lt;code&gt;STOP SLAVE&lt;/code&gt;间接被&lt;code&gt;FLUSH TABLES WITH READ LOCK&lt;/code&gt;阻塞&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;STOP SLAVE&lt;/code&gt;在被阻塞前, 持有了&lt;code&gt;LOCK_active_mi&lt;/code&gt;, 独占了&lt;code&gt;master_info&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;SHOW SLAVE STATUS&lt;/code&gt;会申请锁&lt;code&gt;LOCK_active_mi&lt;/code&gt;, 被&lt;code&gt;STOP SLAVE&lt;/code&gt;阻塞&lt;/li&gt;
+&lt;li&gt;如果&lt;code&gt;SHOW SLAVE STATUS&lt;/code&gt;是由之前&lt;code&gt;FLUSH TABLES WITH READ LOCK&lt;/code&gt;的&lt;code&gt;slave client 1&lt;/code&gt;发出的, 那逻辑上相当于自己在等待自己释放资源&lt;/li&gt;
+&lt;li&gt;从另外的client上&lt;code&gt;UNLOCK TABLES&lt;/code&gt;也解不开&lt;/li&gt;
+&lt;/ol&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>mysql, 利用假master重放binlog</title>
+      <link>http://ikarishinjieva.github.io/post/2014-03-26-mysql-fake-master-server</link>
+      <pubDate>Wed, 26 Mar 2014 20:08:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-03-26-mysql-fake-master-server</guid>
+      <description>
+
+&lt;h2 id=&#34;toc_0&#34;&gt;场景&lt;/h2&gt;
+
+&lt;p&gt;这次想解决的场景是想在一个mysqld实例上重放一些来自于其他实例的binlog, 传统的方法是&lt;code&gt;mysqlbinlog&lt;/code&gt;. 但是&lt;code&gt;mysqlbinlog&lt;/code&gt;会带来一些问题, 比如这个&lt;a href=&#34;http://bugs.mysql.com/bug.php?id=33048&#34;&gt;bug&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;后同事转给我一种利用&lt;a href=&#34;http://www.orczhou.com/index.php/2013/11/use-mysql-replication-to-recove-binlog/&#34;&gt;复制重放binlog的方法&lt;/a&gt;, 其中提到两种方式:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;第一种是修改relay log的信息, 将binlog作为relay log来放. 这是种很好的方法, 缺点是&lt;code&gt;mysqld&lt;/code&gt;需要停机重启. 如果不重启, server中对于&lt;code&gt;relay-log.index&lt;/code&gt;和&lt;code&gt;relay-log.info&lt;/code&gt;等的缓存不会刷新.&lt;/li&gt;
+&lt;li&gt;第二种是起另外一个mysqld实例, 将binlog作为relay log, 再将此实例作为master, 向目标实例进行复制. 这种方式的缺点是作为中间人的mysqld实例需要消耗资源&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;于是想办法将第二种方法进行改进, 即制造一个假的master, 实现简单的复制协议, 直接将binlog复制给目标mysqld实例. 与第二种方式相比, 好处在于只使用少量资源 (一个端口, 一点用来读文件的内存).&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;实现&lt;/h2&gt;
+
+&lt;p&gt;实现参看我的&lt;a href=&#34;https://github.com/ikarishinjieva/mysql_binlog_utils/blob/master/fake_master_server.go&#34;&gt;github&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;注意: 此实现仅适用于mysql 5.5.33, 其它版本未测试&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;由于&lt;a href=&#34;http://dev.mysql.com/doc/internals/en/client-server-protocol.html&#34;&gt;mysql internals&lt;/a&gt; 已经将mysql的网络协议写的比较详细, 需要做的只是起一个tcp的server, 同目标mysqld实例进行交互即可.&lt;/p&gt;
+
+&lt;p&gt;此处逐层介绍实现, 将忽略不需要特别注意的部分. 为了简单, 将binlog的来源mysqld实例称为A, 目标mysqld实例称为B, 假master称为T.&lt;/p&gt;
+
+&lt;p&gt;目标就是讲从A获得的binlog文件, 通过T, 在B上重放出来&lt;/p&gt;
+
+&lt;p&gt;从B发起&lt;code&gt;start slave&lt;/code&gt;, 到T真正向B复制数据, 需要下面两个阶段&lt;/p&gt;
+
+&lt;p&gt;.1. Handshake Phase&lt;/p&gt;
+
+&lt;p&gt;.2. Replication Phase&lt;/p&gt;
+
+&lt;p&gt;先介绍Handshake Phase, 有以下步骤&lt;/p&gt;
+
+&lt;p&gt;.1.1 B执行&lt;code&gt;start slave&lt;/code&gt;, 此时B向T建立一个TCP连接&lt;/p&gt;
+
+&lt;p&gt;.1.2 T向B发送handshake packet&lt;/p&gt;
+
+&lt;p&gt;.1.3 B向T回复handshake packet response&lt;/p&gt;
+
+&lt;p&gt;.1.4 T向B发送ok packet&lt;/p&gt;
+
+&lt;p&gt;在Replication Phase, 有以下步骤&lt;/p&gt;
+
+&lt;p&gt;.2.1 B向T查询&lt;code&gt;SELECT UNIX_TIMESTAMP()&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;.2.2 B向T查询&lt;code&gt;SHOW VARIABLES LIKE &#39;SERVER_ID&#39;&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;.2.3 B向T执行&lt;code&gt;SET @master_heartbeat_period=&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;.2.4 B向T发送COM_REGISTER_SLAVE packet, 得到T回复的ok packet&lt;/p&gt;
+
+&lt;p&gt;.2.5 B向T发送COM_BINLOG_DUMP packet, T开始向B逐一发送binlog event packet&lt;/p&gt;
+
+&lt;p&gt;到目前为止, 所有的packet定义都可以在&lt;a href=&#34;http://dev.mysql.com/doc/internals/en/client-server-protocol.html&#34;&gt;mysql internals&lt;/a&gt;, 逐一实现即可. 这里只简述一些处理packet时需要注意的细节.&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;处理packet时需要注意的细节&lt;/h2&gt;
+
+&lt;ul&gt;
+&lt;li&gt;所有的packet都会包装一个&lt;a href=&#34;http://dev.mysql.com/doc/internals/en/mysql-packet.html&#34;&gt;header&lt;/a&gt;, 其中包括packet payload(不包括header)的大小, 和序号&lt;/li&gt;
+&lt;li&gt;对于序号的处理, 比如2.2中B向T查询&lt;code&gt;SHOW VARIABLES LIKE &#39;SERVER_ID&#39;&lt;/code&gt;, B向T发送的第一个包序号为0, T向B回复的几个包序号依次递增为1,2,3&amp;hellip;&lt;/li&gt;
+&lt;li&gt;注意数据类型, 仅整数, mysql的协议里有&lt;a href=&#34;http://dev.mysql.com/doc/internals/en/integer.html&#34;&gt;定长整数&lt;/a&gt;和变长整数(length encoded integer), 需要特别留意packet payload的类型描述&lt;/li&gt;
+&lt;li&gt;说明一下&lt;a href=&#34;http://dev.mysql.com/doc/internals/en/com-query-response.html#packet-COM_QUERY_Response&#34;&gt;query response packet&lt;/a&gt;. 比如B向T做一个查询, T将通过query response packet来返回查询结果. 需要说明的是, 如果查询结果为空 (比如&lt;code&gt;SET @master_heartbeat_period= ?&lt;/code&gt;的结果), 仅需返回&lt;code&gt;COM_QUERY_RESPONSE&lt;/code&gt;, 后面不需要跟着空的column定义和row数据&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;对超大packet的支持&lt;/h2&gt;
+
+&lt;p&gt;当一个packet过大 (超过&lt;code&gt;1&amp;lt;&amp;lt;24-1&lt;/code&gt;byte ~= 16 MB) 时, 传输需要对packet进行切割, 参看&lt;a href=&#34;http://dev.mysql.com/doc/internals/en/sending-more-than-16mbyte.html&#34;&gt;这里&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;注意, 在A上生成binlog时, 是可以容纳大于16MB的packet的, 也就是原binlog里存在超大的event, 需要在传输时加以限制&lt;/p&gt;
+
+&lt;p&gt;切割packet没什么特别之处, 仅需要注意包格式, 一个20MB的event的传输packet格式举例为 (此处用&lt;code&gt;16MB&lt;/code&gt;便于描述, 应为&lt;code&gt;1&amp;lt;&amp;lt;24-1&lt;/code&gt;byte):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    packet 1
+        4字节 packet header
+        1字节 值为[00], 是binlog event的特征标志
+        16MB-1字节 为第一段数据
+        
+    packet 2
+        4字节 packet header
+        20MB-16MB+1字节 为第二段数据
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;需要注意的是之后的packet时不带有[00]特征位的. 而包的大小计算范围为&lt;strong&gt;除去前4字节&lt;/strong&gt;的全部字节&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_4&#34;&gt;一些资料&lt;/h2&gt;
+
+&lt;p&gt;除上文提到的资料, 还推荐&lt;a href=&#34;http://boytnt.blog.51cto.com/966121/1279318&#34;&gt;MySQL通讯协议研究系列&lt;/a&gt;, 会对包格式有个直观感觉&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_5&#34;&gt;Trouble shooting&lt;/h2&gt;
+
+&lt;p&gt;在整个过程中, 有时候需要&lt;code&gt;gdb&lt;/code&gt;到&lt;code&gt;mysqld&lt;/code&gt;里来了解通讯协议的工作机制, 这里记录几个常用的函数入口点&lt;/p&gt;
+
+&lt;p&gt;.1. slave连接到master时&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    #0  wait_for_data (fd=21, timeout=3600) at /vagrant/mysql-5.5.35/sql-common/client.c:208
+    #1  0x00000000007316aa in my_connect (fd=21, name=0x7fa074004fd0, namelen=16, timeout=3600) at /vagrant/mysql-5.5.35/sql-common/client.c:187
+    #2  0x00000000007363cb in mysql_real_connect (mysql=0x7fa074004960, host=0x3959cc8 &amp;quot;192.168.56.1&amp;quot;, user=0x3959d05 &amp;quot;repl&amp;quot;, passwd=0x3959d36 &amp;quot;&amp;quot;, db=0x0, port=3306, unix_socket=0x0, client_flag=2147483648)
+        at /vagrant/mysql-5.5.35/sql-common/client.c:3282
+    #3  0x000000000057f138 in connect_to_master (thd=0x7fa074000a40, mysql=0x7fa074004960, mi=0x3959640, reconnect=false, suppress_warnings=false) at /vagrant/mysql-5.5.35/sql/slave.cc:4297
+    #4  0x000000000057edd1 in safe_connect (thd=0x7fa074000a40, mysql=0x7fa074004960, mi=0x3959640) at /vagrant/mysql-5.5.35/sql/slave.cc:4233
+    #5  0x000000000057b15c in handle_slave_io (arg=0x3959640) at /vagrant/mysql-5.5.35/sql/slave.cc:2851
+    #6  0x00007fa096751851 in start_thread () from /lib64/libpthread.so.0
+    #7  0x00007fa0954a690d in clone () from /lib64/libc.so.6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.2. handshake phase&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    #0  send_server_handshake_packet (mpvio=0x7fa0942eb450, data=0x391e5b4 &amp;quot;=!-\\gq$\\%&amp;gt;J8z}&#39;EgVW5&amp;quot;, data_len=21) at /vagrant/mysql-5.5.35/sql/sql_acl.cc:8084
+    #1  0x000000000059a87c in server_mpvio_write_packet (param=0x7fa0942eb450, packet=0x391e5b4 &amp;quot;=!-\\gq$\\%&amp;gt;J8z}&#39;EgVW5&amp;quot;, packet_len=21) at /vagrant/mysql-5.5.35/sql/sql_acl.cc:9082
+    #2  0x000000000059bc99 in native_password_authenticate (vio=0x7fa0942eb450, info=0x7fa0942eb468) at /vagrant/mysql-5.5.35/sql/sql_acl.cc:9713
+    #3  0x000000000059ad86 in do_auth_once (thd=0x391cc70, auth_plugin_name=0x1026760, mpvio=0x7fa0942eb450) at /vagrant/mysql-5.5.35/sql/sql_acl.cc:9336
+    #4  0x000000000059b23a in acl_authenticate (thd=0x391cc70, connect_errors=0, com_change_user_pkt_len=0) at /vagrant/mysql-5.5.35/sql/sql_acl.cc:9472
+    #5  0x00000000006d9eb5 in check_connection (thd=0x391cc70) at /vagrant/mysql-5.5.35/sql/sql_connect.cc:575
+    #6  0x00000000006d9ffc in login_connection (thd=0x391cc70) at /vagrant/mysql-5.5.35/sql/sql_connect.cc:633
+    #7  0x00000000006da5ba in thd_prepare_connection (thd=0x391cc70) at /vagrant/mysql-5.5.35/sql/sql_connect.cc:789
+    #8  0x00000000006daa28 in do_handle_one_connection (thd_arg=0x391cc70) at /vagrant/mysql-5.5.35/sql/sql_connect.cc:855
+    #9  0x00000000006da583 in handle_one_connection (arg=0x391cc70) at /vagrant/mysql-5.5.35/sql/sql_connect.cc:781
+    #10 0x00007fa096751851 in start_thread () from /lib64/libpthread.so.0
+    #11 0x00007fa0954a690d in clone () from /lib64/libc.so.6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.3. query时回复column定义&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    #0  Protocol::send_result_set_metadata (this=0x3767610, list=0x3769328, flags=5)
+        at /vagrant/mysql-5.5.35/sql/protocol.cc:677
+    #1  0x00000000005c6745 in select_send::send_result_set_metadata (this=0x7f350c001658, list=..., flags=5)
+        at /vagrant/mysql-5.5.35/sql/sql_class.cc:2132
+    #2  0x000000000062895a in JOIN::exec (this=0x7f350c001678) at /vagrant/mysql-5.5.35/sql/sql_select.cc:1858
+    #3  0x000000000062b2a0 in mysql_select (thd=0x37670e0, rref_pointer_array=0x3769400, tables=0x0, wild_num=0,
+        fields=..., conds=0x0, og_num=0, order=0x0, group=0x0, having=0x0, proc_param=0x0, select_options=2147748608,
+        result=0x7f350c001658, unit=0x3768bf8, select_lex=0x3769218) at /vagrant/mysql-5.5.35/sql/sql_select.cc:2604
+    #4  0x00000000006232f5 in handle_select (thd=0x37670e0, lex=0x3768b48, result=0x7f350c001658,
+        setup_tables_done_option=0) at /vagrant/mysql-5.5.35/sql/sql_select.cc:297
+    #5  0x00000000005fe82d in execute_sqlcom_select (thd=0x37670e0, all_tables=0x0)
+        at /vagrant/mysql-5.5.35/sql/sql_parse.cc:4627
+    #6  0x00000000005f7379 in mysql_execute_command (thd=0x37670e0) at /vagrant/mysql-5.5.35/sql/sql_parse.cc:2178
+    #7  0x0000000000600a43 in mysql_parse (thd=0x37670e0, rawbuf=0x7f350c001430 &amp;quot;SELECT UNIX_TIMESTAMP()&amp;quot;, length=23,
+        parser_state=0x7f35195056f0) at /vagrant/mysql-5.5.35/sql/sql_parse.cc:5664
+    #8  0x00000000005f490a in dispatch_command (command=COM_QUERY, thd=0x37670e0,
+        packet=0x3770e21 &amp;quot;SELECT UNIX_TIMESTAMP()&amp;quot;, packet_length=23) at /vagrant/mysql-5.5.35/sql/sql_parse.cc:1040
+    #9  0x00000000005f3c00 in do_command (thd=0x37670e0) at /vagrant/mysql-5.5.35/sql/sql_parse.cc:773
+    #10 0x00000000006daa4b in do_handle_one_connection (thd_arg=0x37670e0)
+        at /vagrant/mysql-5.5.35/sql/sql_connect.cc:862
+    #11 0x00000000006da583 in handle_one_connection (arg=0x37670e0) at /vagrant/mysql-5.5.35/sql/sql_connect.cc:781
+    #12 0x00007f352e043851 in start_thread () from /lib64/libpthread.so.0
+    #13 0x00007f352cd9890d in clone () from /lib64/libc.so.6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.4. query读取数据结果&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    #0  cli_read_query_result (mysql=0x7f3508004960) at /vagrant/mysql-5.5.35/sql-common/client.c:3829
+    #1  0x0000000000738016 in mysql_real_query (mysql=0x7f3508004960, query=0xb80e34 &amp;quot;SELECT UNIX_TIMESTAMP()&amp;quot;,
+        length=23) at /vagrant/mysql-5.5.35/sql-common/client.c:3918
+    #2  0x00000000005766ec in get_master_version_and_clock (mysql=0x7f3508004960, mi=0x375b400)
+        at /vagrant/mysql-5.5.35/sql/slave.cc:1328
+    #3  0x000000000057b35a in handle_slave_io (arg=0x375b400) at /vagrant/mysql-5.5.35/sql/slave.cc:2881
+    #4  0x00007f352e043851 in start_thread () from /lib64/libpthread.so.0
+    #5  0x00007f352cd9890d in clone () from /lib64/libc.so.6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;.5. slave发送COM_BINLOG_DUMP&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    #0  request_dump (thd=0x7f35f80008c0, mysql=0x7f35f80076c0, mi=0x3301ac0,
+        suppress_warnings=0x7f361c189e2b)
+        at /vagrant/mysql-5.5.35/sql/slave.cc:2184
+    #1  0x000000000057b596 in handle_slave_io (arg=0x3301ac0)
+        at /vagrant/mysql-5.5.35/sql/slave.cc:2935
+    #2  0x00007f3620c66851 in start_thread () from /lib64/libpthread.so.0
+    #3  0x00007f361f9bb90d in clone () from /lib64/libc.so.6
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>尝试使用mysql plugin将RESET SLAVE后的节点重新恢复成slave</title>
+      <link>http://ikarishinjieva.github.io/post/2014-02-11-try-rollback-master-back-to-slave-by-mysql-plugin</link>
+      <pubDate>Tue, 11 Feb 2014 22:31:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-02-11-try-rollback-master-back-to-slave-by-mysql-plugin</guid>
+      <description>
+
+&lt;p&gt;这几天在尝试为以下场景制作一个mysql plugin, 但是是一个失败的尝试, 在此记录&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;场景&lt;/h2&gt;
+
+&lt;pre&gt;&lt;code&gt;一对mysql主从节点 M-S, 节点S执行了RESET SLAVE
+后来后悔了
+在没有数据通过非replication的渠道写入S的条件下, 想让S和M重新恢复成一对主从
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;关键点是S能将&lt;code&gt;RESET SLAVE&lt;/code&gt;时S的&lt;code&gt;Exec_Master_Log_Pos&lt;/code&gt;和&lt;code&gt;S binlog pos&lt;/code&gt;记录下来&lt;/p&gt;
+
+&lt;p&gt;尝试了以下几种方案:&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;调用者在&lt;code&gt;RESET SLAVE&lt;/code&gt;时手工记录, 不需要制作插件&lt;/h2&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;Audit plugin.&lt;/h2&gt;
+
+&lt;p&gt;Mysql的Audit plugin可以审计大部分mysqld经手的SQL, 包括&lt;code&gt;RESET SLAVE&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;但Audit plugin是在每个SQL之后才会调用. 在&lt;code&gt;RESET SLAVE&lt;/code&gt;时S上master_info会被清理, 即&lt;code&gt;Exec_Master_Log_Pos&lt;/code&gt;的信息在调用Audit plugin已经丢失&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;Replication plugin (&lt;code&gt;after_reset_slave&lt;/code&gt;)&lt;/h2&gt;
+
+&lt;p&gt;Replication plugin (参看mysql semisync的源码), 在slave端提供了&lt;code&gt;Binlog_relay_IO_observer&lt;/code&gt;, 贴个Mysql源码方便理解&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;/**
+    Observes and extends the service of slave IO thread.
+ */
+ typedef struct Binlog_relay_IO_observer {
+   uint32 len;
+
+   /**
+      This callback is called when slave IO thread starts
+
+      @param param Observer common parameter
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*thread_start)(Binlog_relay_IO_param *param);
+
+   /**
+      This callback is called when slave IO thread stops
+
+      @param param Observer common parameter
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*thread_stop)(Binlog_relay_IO_param *param);
+
+   /**
+      This callback is called before slave requesting binlog transmission from master
+
+      This is called before slave issuing BINLOG_DUMP command to master
+      to request binlog.
+
+      @param param Observer common parameter
+      @param flags binlog dump flags
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*before_request_transmit)(Binlog_relay_IO_param *param, uint32 flags);
+
+   /**
+      This callback is called after read an event packet from master
+
+      @param param Observer common parameter
+      @param packet The event packet read from master
+      @param len Length of the event packet read from master
+      @param event_buf The event packet return after process
+      @param event_len The length of event packet return after process
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*after_read_event)(Binlog_relay_IO_param *param,
+                           const char *packet, unsigned long len,
+                           const char **event_buf, unsigned long *event_len);
+
+   /**
+      This callback is called after written an event packet to relay log
+
+      @param param Observer common parameter
+      @param event_buf Event packet written to relay log
+      @param event_len Length of the event packet written to relay log
+      @param flags flags for relay log
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*after_queue_event)(Binlog_relay_IO_param *param,
+                            const char *event_buf, unsigned long event_len,
+                            uint32 flags);
+
+   /**
+      This callback is called after reset slave relay log IO status
+
+      @param param Observer common parameter
+
+      @retval 0 Sucess
+      @retval 1 Failure
+   */
+   int (*after_reset_slave)(Binlog_relay_IO_param *param);
+ } Binlog_relay_IO_observer;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;首先尝试用&lt;code&gt;after_reset_slave&lt;/code&gt;, 从函数名字就可以看到会遇到和Audit Plugin相同的问题: 即&lt;code&gt;Exec_Master_Log_Pos&lt;/code&gt;的信息在调用时已经丢失&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_4&#34;&gt;Replication plugin (&lt;code&gt;after_reset_slave&lt;/code&gt;再尝试, &lt;code&gt;future_group_master_log_pos&lt;/code&gt;)&lt;/h2&gt;
+
+&lt;p&gt;还不死心, &lt;code&gt;Exec_Master_Log_Pos&lt;/code&gt;的数据结构是&lt;code&gt;Relay_log_info.group_master_log_pos&lt;/code&gt;, 尽管这个信息在&lt;code&gt;after_reset_slave&lt;/code&gt;时已经丢失, 但发现&lt;code&gt;Relay_log_info.future_group_master_log_pos&lt;/code&gt;可能是个方向&lt;/p&gt;
+
+&lt;p&gt;先解释&lt;code&gt;Relay_log_info.future_group_master_log_pos&lt;/code&gt;, 可以参看&lt;code&gt;log_event.cc&lt;/code&gt;的这段注释&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;  /*
+    InnoDB internally stores the master log position it has executed so far,
+    i.e. the position just after the COMMIT event.
+    When InnoDB will want to store, the positions in rli won&#39;t have
+    been updated yet, so group_master_log_* will point to old BEGIN
+    and event_master_log* will point to the beginning of current COMMIT.
+    But log_pos of the COMMIT Query event is what we want, i.e. the pos of the
+    END of the current log event (COMMIT). We save it in rli so that InnoDB can
+    access it.
+  */
+  const_cast&amp;lt;Relay_log_info*&amp;gt;(rli)-&amp;gt;future_group_master_log_pos= log_pos;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;code&gt;future_group_master_log_pos&lt;/code&gt;指向了execute的最后一个transaction的COMMIT event之前, 即&lt;code&gt;future_group_master_log_pos&lt;/code&gt; 大部分时间等于 &lt;code&gt;group_master_log_pos - 27&lt;/code&gt; (27是COMMIT event的长度)&lt;/p&gt;
+
+&lt;p&gt;但仍有例外情况: 如果M执行了&lt;code&gt;FLUSH LOGS&lt;/code&gt;, 将log从0001递增到了0002, 此时S上的&lt;code&gt;future_group_master_log_pos&lt;/code&gt;会指向0001的最后一个transaction的COMMIT event之前. 但S上的&lt;code&gt;group_master_log_name&lt;/code&gt;已经到了0002, 与&lt;code&gt;future_group_master_log_pos&lt;/code&gt;不匹配, 会引起异常&lt;/p&gt;
+
+&lt;p&gt;(其实此时S上的&lt;code&gt;group_master_log_name&lt;/code&gt;也已经置空了, 但可以从内存残片中恢复出文件名)&lt;/p&gt;
+
+&lt;p&gt;设想如果对于log_name也有&lt;code&gt;future_group_master_log_name&lt;/code&gt;, 那么S可以直接&lt;code&gt;change master&lt;/code&gt;到M的&lt;code&gt;future_group_master_log_name&lt;/code&gt;和&lt;code&gt;future_group_master_log_pos&lt;/code&gt;位置, 可以恢复起M-S主从结构&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_5&#34;&gt;Replication plugin (&lt;code&gt;thread_stop&lt;/code&gt;)&lt;/h2&gt;
+
+&lt;p&gt;Replication plugin的&lt;code&gt;thread_stop&lt;/code&gt;是指Slave IO thread停止时调用, 此时可以拿到&lt;code&gt;Exec_Master_Log_Pos&lt;/code&gt;和&lt;code&gt;S binlog pos&lt;/code&gt;, 但拿到的&lt;code&gt;S binlog pos&lt;/code&gt;没有意义, 因为不能保证Slave SQL thread也停下来了&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_6&#34;&gt;Storage Engine plugin&lt;/h2&gt;
+
+&lt;p&gt;这是我最后一根救命稻草, 阅读Mysql源码时注意到以下片段(做了缩减)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;int reset_slave(THD *thd, Master_info* mi)
+{
+    ...
+    ha_reset_slave(thd);
+    ... //clean memory data
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;code&gt;reset_slave&lt;/code&gt;在清理内存数据前通知了storage engine插件, 这个插件可以获得所有必要信息&lt;/p&gt;
+
+&lt;p&gt;但存在一个问题, 即&lt;code&gt;ha_reset_slave&lt;/code&gt;仅在Mysql NDB版本中存在, 不具备通用性, 参看宏定义(做了缩减)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#ifdef HAVE_NDB_BINLOG
+...
+void ha_reset_slave(THD *thd);
+...
+#else
+...
+#define ha_reset_slave(a) do {} while (0)
+...
+#endif
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;toc_7&#34;&gt;吐槽和总结&lt;/h2&gt;
+
+&lt;p&gt;可以看到Mysql plugin不&lt;strong&gt;太&lt;/strong&gt;预留接口, 是仅仅为已知应用场景提供必要接口, 比如&lt;code&gt;Binlog_relay_IO_observer&lt;/code&gt;中有&lt;code&gt;after&lt;/code&gt;不一定有&lt;code&gt;before&lt;/code&gt;. 比较容易控制插件质量, 但插件能做到的非常局限.&lt;/p&gt;
+
+&lt;p&gt;以上各种尝试, 归根到底, 只要修改Mysql的一点源码编译一下就可以达到很好的效果, 不需要用插件的方式在Mysql中到处找功能插槽, 但通用性变差.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>编译mysql插件的碰到的问题</title>
+      <link>http://ikarishinjieva.github.io/post/2014-01-28-compile-mysql-plugin</link>
+      <pubDate>Tue, 28 Jan 2014 16:48:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2014-01-28-compile-mysql-plugin</guid>
+      <description>&lt;p&gt;最近尝试制作了&lt;a href=&#34;https://github.com/ikarishinjieva/mysql_plugin-binlog_dump_list&#34;&gt;一个mysql的插件&lt;/a&gt;. 对c/c++的编译不熟, 又是第一次尝试做mysql插件, 编译过程中碰到些状况&lt;/p&gt;
+
+&lt;p&gt;编写好mysql插件后, 编译成功, 在mysql中安装运行报错: 取了&lt;code&gt;threads&lt;/code&gt;中的THD, 其中THD-&amp;gt;thread_id值为空&lt;/p&gt;
+
+&lt;p&gt;由于是mysql内置的数据结构, 一时没了头绪, 只能通过gdb连上去看看&lt;/p&gt;
+
+&lt;p&gt;发现plugin打印出来的thread_id距离THD开头的距离为&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;tmp=0x3661f80
+&amp;amp;tmp-&amp;gt;thread_id=0x36637b0
+delta = 0x1830
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;而gdb打印出来的距离为&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;(gdb) p tmp
+$1 = (THD *) 0x3661f80
+(gdb) p &amp;amp;tmp-&amp;gt;thread_id
+$2 = (my_thread_id *) 0x3663878
+delta = 0x18F8
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;结论很显然, plugin编译的THD结构和mysqld的THD结构不匹配, 即plugin的编译参数和mysqld的编译参数不一样.&lt;/p&gt;
+
+&lt;p&gt;当然mysql的文档上只会说一句大意是 &amp;ldquo;&lt;strong&gt;编译参数应当设置成一样的&lt;/strong&gt;&amp;ldquo;的话&lt;/p&gt;
+
+&lt;p&gt;其中比较重要的几个编译选项&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;DBUG_ON&lt;/li&gt;
+&lt;li&gt;SAFE_MUTEX&lt;/li&gt;
+&lt;li&gt;DBUG_OFF (不设置DBUG_ON并不等于DBUG_OFF)&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;这几个选项会影响当使用mysqld内部数据结构的长度, 不排除还有其他&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>对Mysql bug #70307 的学习</title>
+      <link>http://ikarishinjieva.github.io/post/2013-10-25-study-mysql-bug-70307</link>
+      <pubDate>Fri, 25 Oct 2013 22:00:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-10-25-study-mysql-bug-70307</guid>
+      <description>
+
+&lt;p&gt;之前描述&lt;a href=&#34;http://ikarishinjieva.github.io/blog/blog/2013/10/11/hole-in-mysql-56-replication-dead-lock/&#34;&gt;Mysql 5.6.15 Replication中碰到的死锁&lt;/a&gt;的情况，这次尝试debug下原因。&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;debug的过程&lt;/h2&gt;
+
+&lt;p&gt;用参数&amp;ndash;gdb启动mysql，按照&lt;a href=&#34;http://bugs.mysql.com/file.php?id=20542&#34;&gt;步骤&lt;/a&gt;重现bug（让slave &amp;ldquo;show slave status&amp;rdquo;时卡住）。然后用gdb attach到slave mysql实例上。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;(gdb) thread apply all bt
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;输出所有线程的backtrace，找到show slave status卡住的线程和位置&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Thread 2 (Thread 0x7f583c166700 (LWP 2440)):
+#0  0x00007f583f484054 in __lll_lock_wait () from /lib64/libpthread.so.0
+#1  0x00007f583f47f3be in _L_lock_995 () from /lib64/libpthread.so.0
+#2  0x00007f583f47f326 in pthread_mutex_lock () from /lib64/libpthread.so.0
+#3  0x0000000000aa3cde in safe_mutex_lock (mp=0x3516ae8, try_lock=0 &#39;\000&#39;, file=0xfb8e58 &amp;quot;/home/vagrant/mysql-5.6.12/sql/rpl_slave.cc&amp;quot;, line=2611) at /home/vagrant/mysql-5.6.12/mysys/thr_mutex.c:152
+#4  0x0000000000a4b993 in inline_mysql_mutex_lock (that=0x3516ae8, src_file=0xfb8e58 &amp;quot;/home/vagrant/mysql-5.6.12/sql/rpl_slave.cc&amp;quot;, src_line=2611) at /home/vagrant/mysql-5.6.12/include/mysql/psi/mysql_thread.h:686
+#5  0x0000000000a53cb3 in show_slave_status (thd=0x352e3d0, mi=0x34b4f20) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:2611
+#6  0x00000000007d45f4 in mysql_execute_command (thd=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:2766
+#7  0x00000000007ddc46 in mysql_parse (thd=0x352e3d0, rawbuf=0x7f57ec005010 &amp;quot;show slave status&amp;quot;, length=17, parser_state=0x7f583c165660) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:6187
+#8  0x00000000007d1019 in dispatch_command (command=COM_QUERY, thd=0x352e3d0, packet=0x3534e51 &amp;quot;&amp;quot;, packet_length=17) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:1334
+#9  0x00000000007d017b in do_command (thd=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:1036
+#10 0x0000000000797a08 in do_handle_one_connection (thd_arg=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_connect.cc:977
+#11 0x00000000007974e4 in handle_one_connection (arg=0x352e3d0) at /home/vagrant/mysql-5.6.12/sql/sql_connect.cc:893
+#12 0x0000000000aea87a in pfs_spawn_thread (arg=0x351b510) at /home/vagrant/mysql-5.6.12/storage/perfschema/pfs.cc:1855
+#13 0x00007f583f47d851 in start_thread () from /lib64/libpthread.so.0
+#14 0x00007f583e3e890d in clone () from /lib64/libc.so.6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到show slave status卡在&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#5  0x0000000000a53cb3 in show_slave_status (thd=0x352e3d0, mi=0x34b4f20) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:2611
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;查找源码可以看到show slave status卡在获取锁mi-&amp;gt;rli-&amp;gt;data_lock上&lt;br/&gt;(科普下缩写: mi=master info, rli=relay log info&lt;/p&gt;
+
+&lt;p&gt;在gdb中运行命令&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;(gdb) thread 2
+(gdb) f 5
+(gdb) print mi-&amp;gt;rli-&amp;gt;data_lock
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;切换到thread 2堆栈第5层的上下文，打印出mi-&amp;gt;rli-&amp;gt;data_lock变量，输出如下&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$1 = {m_mutex = {global = {__data = {__lock = 0, __count = 0, __owner = 0, __nusers = 0, __kind = 2, __spins = 0,
+    __list = {__prev = 0x0, __next = 0x0}},
+  __size = &#39;\000&#39; &amp;lt;repeats 16 times&amp;gt;, &amp;quot;\002&amp;quot;, &#39;\000&#39; &amp;lt;repeats 22 times&amp;gt;, __align = 0}, mutex = {__data = {
+    __lock = 2, __count = 0, __owner = 2435, __nusers = 1, __kind = 3, __spins = 0, __list = {__prev = 0x0,
+      __next = 0x0}},
+  __size = &amp;quot;\002\000\000\000\000\000\000\000\203\t\000\000\001\000\000\000\003&amp;quot;, &#39;\000&#39; &amp;lt;repeats 22 times&amp;gt;,
+  __align = 2}, file = 0xfa4520 &amp;quot;/home/vagrant/mysql-5.6.12/sql/log_event.cc&amp;quot;, line = 7259, count = 1,
+thread = 140016942216960}, m_psi = 0x0}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;看到锁的owner是线程(LWP 2435)，为Thread 3&lt;/p&gt;
+
+&lt;p&gt;Thread 3的backtrace如下&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Thread 3 (Thread 0x7f583c1a7700 (LWP 2435)):
+#0  0x00007f583f4817bb in pthread_cond_timedwait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
+#1  0x0000000000aa429d in safe_cond_timedwait (cond=0x7f57f4000ba8, mp=0x7f57f4000b38, abstime=0x7f583c1a60f0, file=0xedc960 &amp;quot;/home/vagrant/mysql-5.6.12/include/mysql/psi/mysql_thread.h&amp;quot;, line=1199) at /home/vagrant/mysql-5.6.12/mysys/thr_mutex.c:278
+#2  0x00000000007121f4 in inline_mysql_cond_timedwait (that=0x7f57f4000ba8, mutex=0x7f57f4000b38, abstime=0x7f583c1a60f0, src_file=0xedcb98 &amp;quot;/home/vagrant/mysql-5.6.12/sql/mdl.cc&amp;quot;, src_line=1306) at /home/vagrant/mysql-5.6.12/include/mysql/psi/mysql_thread.h:1199
+#3  0x0000000000713111 in MDL_wait::timed_wait (this=0x7f57f4000b38, owner=0x7f57f4000a50, abs_timeout=0x7f583c1a60f0, set_status_on_timeout=true, wait_state_name=0x14d0488) at /home/vagrant/mysql-5.6.12/sql/mdl.cc:1306
+#4  0x0000000000714811 in MDL_context::acquire_lock (this=0x7f57f4000b38, mdl_request=0x7f583c1a6180, lock_wait_timeout=31536000) at /home/vagrant/mysql-5.6.12/sql/mdl.cc:2241
+#5  0x000000000063656a in ha_commit_trans (thd=0x7f57f4000a50, all=true) at /home/vagrant/mysql-5.6.12/sql/handler.cc:1396 (COMMIT LOCK)
+#6  0x00000000008a010b in trans_commit (thd=0x7f57f4000a50) at /home/vagrant/mysql-5.6.12/sql/transaction.cc:228
+#7  0x0000000000a081bb in Xid_log_event::do_commit (this=0x7f57f4004730, thd=0x7f57f4000a50) at /home/vagrant/mysql-5.6.12/sql/log_event.cc:7174
+#8  0x0000000000a0886e in Xid_log_event::do_apply_event (this=0x7f57f4004730, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/log_event.cc:7310 (rli-&amp;gt;data_lock)
+#9  0x00000000009fd956 in Log_event::apply_event (this=0x7f57f4004730, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/log_event.cc:3049
+#10 0x0000000000a55e31 in apply_event_and_update_pos (ptr_ev=0x7f583c1a68a0, thd=0x7f57f4000a50, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:3374
+#11 0x0000000000a56e45 in exec_relay_log_event (thd=0x7f57f4000a50, rli=0x3516650) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:3742
+#12 0x0000000000a5c334 in handle_slave_sql (arg=0x34b4f20) at /home/vagrant/mysql-5.6.12/sql/rpl_slave.cc:5552
+#13 0x0000000000aea87a in pfs_spawn_thread (arg=0x350a800) at /home/vagrant/mysql-5.6.12/storage/perfschema/pfs.cc:1855
+#14 0x00007f583f47d851 in start_thread () from /lib64/libpthread.so.0
+#15 0x00007f583e3e890d in clone () from /lib64/libc.so.6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到Thread 3卡在commit lock上，同时查源码看到Thread 3同时占有了rli-&amp;gt;data_lock (log_event.cc:7259)&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;锁的状态&lt;/h2&gt;
+
+&lt;p&gt;按照bug的描述，&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;flush tables with read lock; 会持有commit lock&lt;/li&gt;
+&lt;li&gt;IO thread (Thread 3)会持有rli-&amp;gt;data_lock，并等待commit lock&lt;/li&gt;
+&lt;li&gt;show slave status; 会等待rli-&amp;gt;data_lock&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;结果导致show slave status卡住不可用&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;臆测一下解决方法&lt;/h2&gt;
+
+&lt;p&gt;鉴于功底不深，只能臆测一下&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;IO thread持有锁rli-&amp;gt;data_lock的原因是要更新relay log的状态，然后进行commit(Xid_log_event::do_apply_event (log_event.cc:7248))。在commit的时候不会更新rli的数据。&lt;/li&gt;
+&lt;li&gt;show slave status不会更新rli的数据，需要锁rli-&amp;gt;data_lock的原因是要一致性数据。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;因此可能的解决方案是IO thread持有读写锁，进行commit时转为持有读锁。show slave status只使用读锁。&lt;/p&gt;
+
+&lt;p&gt;只是臆测下解决方法，待&lt;a href=&#34;http://bugs.mysql.com/bug.php?id=70307&#34;&gt;bug #70307&lt;/a&gt;修掉时再学习。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Mysql 5.6.12 master上flush logs在slave上产生两个relay-log</title>
+      <link>http://ikarishinjieva.github.io/post/2013-10-22-mysql-flush-logs-make-two-relay-log-file</link>
+      <pubDate>Tue, 22 Oct 2013 21:42:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-10-22-mysql-flush-logs-make-two-relay-log-file</guid>
+      <description>
+
+&lt;h2 id=&#34;toc_0&#34;&gt;现象&lt;/h2&gt;
+
+&lt;p&gt;一个碰巧观察到的有趣的现象：mysql 5.6.12 在master上flush logs，在slave上会观察到两个新的relay-log file&lt;/p&gt;
+
+&lt;p&gt;举例：&lt;/p&gt;
+
+&lt;p&gt;slave-relay-bin.000092&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; FD event
+ Rotate to mysql-bin.000056
+ Rotate to slave-relay-bin.000093
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;slave-relay-bin.000093&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; FD event slave
+ Rotate to mysql-bin.000056
+ FD event master
+ bla bla…
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到000092这个relay log相当多余。这个现象并不会影响replication的正确性，只是让有强迫症的人有点狂躁&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;探索&lt;/h2&gt;
+
+&lt;p&gt;在master上net_serv.cc:my_net_write打断点，可以观察到master的确发出了以下三个事件&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;ROTATE_EVENT&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;backtrace&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#0  my_net_write (net=0x1ea2858, packet=0x7fffa4002b70 &amp;quot;&amp;quot;, len=48)
+    at /home/vagrant/mysql-5.6.12/sql/net_serv.cc:284
+#1  0x0000000000a48b05 in mysql_binlog_send (thd=0x1ea2600, log_ident=0x7fffa4004c60 &amp;quot;mysql-bin.000052&amp;quot;, pos=167,
+    slave_gtid_executed=0x0) at /home/vagrant/mysql-5.6.12/sql/rpl_master.cc:1336
+#2  0x0000000000a46ad2 in com_binlog_dump (thd=0x1ea2600, packet=0x1ea5d21 &amp;quot;&amp;quot;, packet_length=26)
+    at /home/vagrant/mysql-5.6.12/sql/rpl_master.cc:746
+#3  0x00000000007d1ab9 in dispatch_command (command=COM_BINLOG_DUMP, thd=0x1ea2600, packet=0x1ea5d21 &amp;quot;&amp;quot;,
+    packet_length=26) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:1534
+#4  0x00000000007d017b in do_command (thd=0x1ea2600) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:1036
+#5  0x0000000000797a08 in do_handle_one_connection (thd_arg=0x1ea2600)
+    at /home/vagrant/mysql-5.6.12/sql/sql_connect.cc:977
+#6  0x00000000007974e4 in handle_one_connection (arg=0x1ea2600)
+    at /home/vagrant/mysql-5.6.12/sql/sql_connect.cc:893
+#7  0x0000000000aea87a in pfs_spawn_thread (arg=0x1e7aa80)
+    at /home/vagrant/mysql-5.6.12/storage/perfschema/pfs.cc:1855
+#8  0x00007ffff7bc7851 in start_thread () from /lib64/libpthread.so.0
+#9  0x00007ffff6b3290d in clone () from /lib64/libc.so.6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;ul&gt;
+&lt;li&gt;第二个ROTATE_EVENT&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;backtrace&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#0  my_net_write (net=0x1ea2858, packet=0x7fffa4002ab0 &amp;quot;&amp;quot;, len=48)
+    at /home/vagrant/mysql-5.6.12/sql/net_serv.cc:284
+#1  0x0000000000a45f04 in fake_rotate_event (net=0x1ea2858, packet=0x1ea2be8,
+    log_file_name=0x7fffc94ff270 &amp;quot;./mysql-bin.000056&amp;quot;, position=4, errmsg=0x7fffc94ffdb0,
+    checksum_alg_arg=1 &#39;\001&#39;) at /home/vagrant/mysql-5.6.12/sql/rpl_master.cc:395
+#2  0x0000000000a4a33d in mysql_binlog_send (thd=0x1ea2600, log_ident=0x7fffa4004c60 &amp;quot;mysql-bin.000052&amp;quot;, pos=167,
+    slave_gtid_executed=0x0) at /home/vagrant/mysql-5.6.12/sql/rpl_master.cc:1728
+#3  0x0000000000a46ad2 in com_binlog_dump (thd=0x1ea2600, packet=0x1ea5d21 &amp;quot;&amp;quot;, packet_length=26)
+    at /home/vagrant/mysql-5.6.12/sql/rpl_master.cc:746
+#4  0x00000000007d1ab9 in dispatch_command (command=COM_BINLOG_DUMP, thd=0x1ea2600, packet=0x1ea5d21 &amp;quot;&amp;quot;,
+    packet_length=26) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:1534
+#5  0x00000000007d017b in do_command (thd=0x1ea2600) at /home/vagrant/mysql-5.6.12/sql/sql_parse.cc:1036
+#6  0x0000000000797a08 in do_handle_one_connection (thd_arg=0x1ea2600)
+    at /home/vagrant/mysql-5.6.12/sql/sql_connect.cc:977
+#7  0x00000000007974e4 in handle_one_connection (arg=0x1ea2600)
+    at /home/vagrant/mysql-5.6.12/sql/sql_connect.cc:893
+#8  0x0000000000aea87a in pfs_spawn_thread (arg=0x1e7aa80)
+    at /home/vagrant/mysql-5.6.12/storage/perfschema/pfs.cc:1855
+#9  0x00007ffff7bc7851 in start_thread () from /lib64/libpthread.so.0
+#10 0x00007ffff6b3290d in clone () from /lib64/libc.so.6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;ul&gt;
+&lt;li&gt;FORMAT_DESCRIPTION_EVENT&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;可以看到第一个ROTATE_EVENT是由flush logs发出的，第二个ROTATE_EVENT是fake_rotate_event&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;关于fake_rotate_event&lt;/h2&gt;
+
+&lt;p&gt;以前也&lt;a href=&#34;http://ikarishinjieva.github.io/blog/blog/2013/10/16/mysql-mysql_binlog_send-src/&#34;&gt;吐槽&lt;/a&gt;过fake_rotate_event&lt;/p&gt;
+
+&lt;p&gt;master在binlog切换时（不一定是手工flush，也可能是重启，或者容量达到限制）一定要多发一个rotate event，原因如源码rpl_master.cc:mysql_binlog_send中的注释&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;  /*
+    Call fake_rotate_event() in case the previous log (the one which
+    we have just finished reading) did not contain a Rotate event.
+    There are at least two cases when this can happen:
+
+    - The previous binary log was the last one before the master was
+      shutdown and restarted.
+
+    - The previous binary log was GTID-free (did not contain a
+      Previous_gtids_log_event) and the slave is connecting using
+      the GTID protocol.
+
+    This way we tell the slave about the new log&#39;s name and
+    position.  If the binlog is 5.0 or later, the next event we
+    are going to read and send is Format_description_log_event.
+  */
+  if ((file=open_binlog_file(&amp;amp;log, log_file_name, &amp;amp;errmsg)) &amp;lt; 0 ||
+      fake_rotate_event(net, packet, log_file_name, BIN_LOG_HEADER_SIZE,
+                        &amp;amp;errmsg, current_checksum_alg))
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;主要是解决之前没有rotate event发送的场景&lt;/p&gt;
+
+&lt;p&gt;虽然非常想吐槽，但是我也想不出更好的办法&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Mysql rpl_slave.cc:handle_slave_io 源码的一些个人分析</title>
+      <link>http://ikarishinjieva.github.io/post/2013-10-20-mysql-handle_slave_io-src</link>
+      <pubDate>Sun, 20 Oct 2013 20:17:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-10-20-mysql-handle_slave_io-src</guid>
+      <description>
+
+&lt;p&gt;读了rpl_slave.cc:handle_slave_io的源码（Mysql 5.6.11），总结一下&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;函数概述&lt;/h2&gt;
+
+&lt;p&gt;handle_slave_io是slave io_thread的主函数，函数逻辑入口为rpl_slave.cc:start_slave_threads&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;主体结构&lt;/h2&gt;
+
+&lt;pre&gt;&lt;code&gt;handle_slave_io(master_info) {
+     3955 bla bla…
+     4016 fire HOOK binlog_relay_io.thread_start
+     4032 与master建立连接
+    (4047 设置max_packet_size)
+     4073 get_master_version_and_clock,
+          在master上：
+          通过SELECT UNIX_TIMESTAMP()获取server timestamp
+          通过SHOW VARIABLES LIKE &#39;SERVER_ID&#39;获取server id
+          SET @master_heartbeat_period= ?
+          SET @master_binlog_checksum= @@global.binlog_checksum
+          SELECT @master_binlog_checksum获取master binlog checksum
+          SELECT @@GLOBAL.GTID_MODE
+     4075 get_master_uuid
+          在master上“SHOW VARIABLES LIKE &#39;SERVER_UUID&#39;”
+     4077 io_thread_init_commands
+          在master上“SET @slave_uuid= &#39;%s&#39;”
+     4106 register_slave_on_master
+          向master发送COM_REGISTER_SLAVE
+     4133 while (!io_slave_killed(thd,mi))
+     4134 {
+     4136      request_dump
+               向master发送COM_BINLOG_DUMP_GTID/COM_BINLOG_DUMP
+     4159      while (!io_slave_killed(thd,mi))
+     4160      {
+     4169           read_event，此为阻塞方法，会阻塞等待有新数据包传入
+     4184          {
+                         一些包错误的处理，包括packet too large / out of resource等
+     4213          }
+     4219          fire HOOK binlog_relay_io.after_read_event
+     4232          queue_event，将event放入relay log写buf
+     4240          fire HOOK binlog_relay_io.after_queue_event
+     4250          flush_master_info，将master_info和relay log刷到disk上
+                   此处，先刷relay log，后刷master_info。这样意外的故障可以通过重连恢复机制来恢复。
+                   若先刷master_info，后刷relay log，意外故障时master_info已经更新，比如(0-100, 100-200)，而数据丢失，仅有(0-100)，恢复的replication会从200开始。整个relay log会成为(0-100, 200-)，中间数据会丢失。
+
+     4286          若relay log达到容量限制，则wait_for_relay_log_space
+     4292      }
+     4293 }
+     4296 之后都是收尾操作        
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;一些重点&lt;/h2&gt;
+
+&lt;ol&gt;
+&lt;li&gt;此处不分析锁什么的，因为看不懂&lt;/li&gt;
+&lt;li&gt;4047 设置max_packet_size的目的不明&lt;/li&gt;
+&lt;li&gt;4073 开始slave会向master直接发送一些sql，然后解析返回。而不是包装在某个包的某个字段里，用一些预定义的变量来传递结果。&lt;br/&gt;这种设计一下就觉得山寨起来。&lt;br/&gt;后经同事 @神仙 指点，mysql这样做貌似是为了兼容性，免得数据包格式被改来改去。&lt;br/&gt;（看到mysql里大量的兼容代码都拿来处理包结构的问题，最极品的可能是莫过于LOG_EVENT_MINIMAL_HEADER_LEN了）&lt;br/&gt;在对流量影响不大的情况下，直接用sql反复查询的确是个好的解决手法&lt;/li&gt;
+&lt;li&gt;4250 将master_info和relay log刷到disk上。&lt;br/&gt;先刷relay log，后刷master_info。这样意外的故障可以通过relay log恢复机制来恢复。&lt;br/&gt;若先刷master_info，后刷relay log，意外故障时master_info已经更新，比如(0-100, 100-200)，而数据(100-200)丢失，仅有(0-100)，恢复的replication会从200开始。整个relay log会成为(0-100, 200-)，中间数据会丢失。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;start slave时slave向master发送的事件&lt;/h2&gt;
+
+&lt;ul&gt;
+&lt;li&gt;
+SELECT UNIX_TIMESTAMP() (rpl_slave.cc:get_master_version_and_clock)&lt;/li&gt;
+&lt;li&gt;SHOW VARIABLES LIKE &amp;lsquo;SERVER_ID&amp;rsquo; (rpl_slave.cc:get_master_version_and_clock)&lt;/li&gt;
+&lt;li&gt;SET @master_heartbeat_period=? (rpl_slave.cc:get_master_version_and_clock)&lt;/li&gt;
+&lt;li&gt;SET @master_binlog_checksum= @@global.binlog_checksum (rpl_slave.cc:get_master_version_and_clock)&lt;/li&gt;
+&lt;li&gt;SELECT @master_binlog_checksum (rpl_slave.cc:get_master_version_and_clock)&lt;/li&gt;
+&lt;li&gt;SELECT @@GLOBAL.GTID_MODE (rpl_slave.cc:get_master_version_and_clock)&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;SHOW VARIABLES LIKE &amp;lsquo;SERVER_UUID&amp;rsquo; （rpl_slave.cc:get_master_uuid）&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;SET @slave_uuid= &amp;lsquo;%s&amp;rsquo;（rpl_slave.cc:io_thread_init_commands)&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;COM_REGISTER_SLAVE(rpl_slave.cc:register_slave_on_master)&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;COM_BINLOG_DUMP(rpl_slave.cc:request_dump)&lt;/p&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&#34;toc_4&#34;&gt;master与slave的时间差&lt;/h2&gt;
+
+&lt;p&gt;可以看到slave获得master的时间方法就是直接下sql，完全忽略网络延迟等等等等，属于不精准的时间&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://guduwhuzhe.iteye.com/blog/1901707&#34;&gt;这篇文章&lt;/a&gt;从源码级别分析了Seconds_Behind_Master的来源，也给出了备库延迟跳跃的原因。总的来说就是Seconds_Behind_Master不可信。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Mysql rpl_master.cc:mysql_binlog_send 源码的一些个人分析和吐槽</title>
+      <link>http://ikarishinjieva.github.io/post/2013-10-16-mysql-mysql_binlog_send-src</link>
+      <pubDate>Wed, 16 Oct 2013 22:50:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-10-16-mysql-mysql_binlog_send-src</guid>
+      <description>
+
+&lt;p&gt;读了两天rpl_master.cc:mysql_binlog_send的源码（Mysql 5.6.11），总结一下&lt;/p&gt;
+
+&lt;p&gt;函数的入口是rpl_master.cc:com_binlog_dump，当slave向master请求数据时，在master上调用&lt;/p&gt;
+
+&lt;p&gt;函数参数说明: &lt;br/&gt;log_ident为slave请求的binlog文件名，如&amp;rdquo;mysql-bin.000001&amp;rdquo;&lt;br/&gt;pos为slave请求的binlog位置&lt;br/&gt;slave_gtid_executed为gtid相关，在此忽略&lt;/p&gt;
+
+&lt;p&gt;在此吐槽：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;这个函数将近1k行，且缩进混乱，代码折叠困难。最后附的我的笔记中，有整理好的源码下载&lt;/li&gt;
+&lt;li&gt;这个函数有两大段近百行的重复代码（1179 &amp;amp; 1553）&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;源码的主体结构&lt;/h2&gt;
+
+&lt;pre&gt;&lt;code&gt;mysql_binlog_send(…)
+{
+     0814 … bla bla
+     1011 fake_rotate_event
+     1028 max_alloed_packet= MAX_MAX_ALLOWED_PACKET
+     1038 if (请求的POS不是从binlog开头开始)
+     1039 {
+               从binlog开头中找到一个FD event(FORMAT_DESCRIPTION_EVENT), 并发送给slave
+     1123 }
+     1124 else
+     1125 {
+               FD event可以从正常的replication中传送给slave，此处不做操作
+     1127 }
+     1132 while (net和the都在运转)
+     1133 {
+     1143      while (从binlog中读取一个event)
+     1144      {
+     1178           switch (event_type)
+     1179           {
+                         分类型处理event
+     1281           }
+     1283           若event需跳转到下一个binlog(goto_next_binlog), break
+     1291           fire HOOK before_send_event
+     1300           记录skip_group
+     1306           {
+                         send last skip group heartbeat?
+     1326           }
+     1331           向slave发送event
+     1348           {
+                         处理LOAD_EVENT
+     1356           }
+     1358           fire HOOK after_send_event
+     1369      }
+     1391      if (!goto_next_binlog)
+     1392      {
+                   发送完所有binlog，未发生binlog切换时
+     1437          加锁尝试再读取一个event（此时其他进程不能更新binlog），目的是试探之前处理过程中master上是否有更多的binlog写入，若有，则跳转1553处理read_packet
+     1451          若没有更多的binlog 
+                   {
+                        等待更多的binlog写入，等待时发送心跳
+     1545          }
+     1553          处理read_packet
+                   {                         
+                        分类型处理event
+     1682          }
+     1683      }
+     1685      if (goto_next_binlog)
+               {
+                    切换到下一个binlog
+               }
+     1733 }
+     1735 之后是收尾处理
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;重点步骤&lt;/h2&gt;
+
+&lt;ol&gt;
+&lt;li&gt;补发Format Description event。&lt;br/&gt;如果传送从binlog开头开始，那么FD event会正常随着binlog传送；&lt;br/&gt;若传送不从binlog开头开始，则需要补发一个FD event，才开始传送&lt;/li&gt;
+&lt;li&gt;如何判断binlog读取完&lt;br/&gt;函数先不加锁读取binlog中的event，读完后，再加锁尝试读取一个event（加锁过程中，没有其他进程写进binlog），若有数据，则继续处理，若没有数据，则说明binlog读取完了，master会阻塞等待新的binlog写入。&lt;br/&gt;这样做主要为了：&lt;br/&gt;1. 不需要一直加锁读取binlog，保障性能；&lt;br/&gt;2. 无锁读取时会有其他进程写binlog，加锁可以保障这些新加的binlog得到妥善安置&lt;/li&gt;
+&lt;li&gt;心跳&lt;br/&gt;仅在不传送binlog时（master穷尽了binlog，开始阻塞等待新的binlog写入时）才进行心跳&lt;/li&gt;
+&lt;li&gt;Fake Rotate Event&lt;br/&gt;Fake Rotate Event在开始传送和切换binlog时发送到slave。主要作用是通知slave binlog filename，原因在源码comment里写的很清楚。但是很疑惑的是为什么在FD event里并没有binlog filename，这个问题发到了&lt;a href=&#34;http://stackoverflow.com/questions/19375951/in-mysql-replication-why-format-description-event-doesnt-include-binlogs-name&#34;&gt;StackoverFlow&lt;/a&gt;，未有答案。（诶，看看我的stackoverflow的记录就知道，我的问题都是死题）&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;TODO&lt;/h2&gt;
+
+&lt;p&gt;有一些东西还是没弄懂，得慢慢读懂其他机制才可以，比如&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;max_alloed_packet是如何作用的&lt;/li&gt;
+&lt;li&gt;send last skip group heartbeat的作用&lt;/li&gt;
+&lt;li&gt;不同类型的event的具体处理，需要和slave端结合在一起&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;我的笔记&lt;/h2&gt;
+
+&lt;p&gt;我的笔记&lt;a href=&#34;https://app.yinxiang.com/shard/s11/sh/f23e9619-9c3d-47f5-a911-8945d0ee02a5/f4eb8539fb2f99e1481496c994b2c270&#34;&gt;在此&lt;/a&gt;&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>MHA failover时做了些啥</title>
+      <link>http://ikarishinjieva.github.io/post/2013-10-14-mha-failover</link>
+      <pubDate>Mon, 14 Oct 2013 21:39:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-10-14-mha-failover</guid>
+      <description>
+
+&lt;p&gt;读了MHA failover部分的源码整理一下&lt;/p&gt;
+
+&lt;p&gt;代码位置注解的格式为file_name@function_name&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;设定场景&lt;/h2&gt;
+
+&lt;p&gt;假设集群里有四个mysql实例分别是old_master和slave 0,1,2
+slave 0,1,2 执行failover中的角色分别为 Latest slave, Oldest slave 和 New master&lt;/p&gt;
+
+&lt;p&gt;如图
+&lt;img src=&#34;../../blog-img/2013-10-14-mha-failover-1.png&#34; alt=&#34;img&#34; /&gt;
+&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;Failover的步骤代码&lt;/h2&gt;
+
+&lt;p&gt;(MasterFailover@do_master_failover)&lt;/p&gt;
+
+&lt;p&gt;1  check_settings&lt;/p&gt;
+
+&lt;p&gt;2  force_shutdown&lt;/p&gt;
+
+&lt;p&gt;3.1    check_set_latest_slaves&lt;/p&gt;
+
+&lt;p&gt;3.2    save_master_binlog&lt;/p&gt;
+
+&lt;p&gt;3.3    Determining New Master Phase&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;3.3.1 find_latest_base_slave
+
+3.3.2 select_new_master
+
+3.3.3 recover_master
+
+3.3.4 $new_master-&amp;gt;{activated} = 1;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;4  Slaves Recovery Phase&lt;/p&gt;
+
+&lt;p&gt;4.1 Starting Parallel Slave Diff Log Generation Phase.&lt;/p&gt;
+
+&lt;p&gt;4.2 Starting Parallel Slave Log Apply Phase.&lt;/p&gt;
+
+&lt;p&gt;5  cleanup&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;Failover的一些步骤说明&lt;/h2&gt;
+
+&lt;p&gt;2  force_shutdown&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;2.1  对所有slave, stop io thread.(MasterFailover@force_shutdown) 这里仅stop io thread, 而不是stop slave, 尽可能让sql thread运行。sql thread是在recover必要时（要生成差异数据时）才停下。 
+
+2.2  在Old master上回收动态ip, shutdown（并可选用power manager对Old master进行关机）. (MasterFailover@force_shutdown_internal)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;3.1  check_set_latest_slaves, 确定latest_slave和oldest_slaves. latest_slave指的是slave中relay log最超前的slave, 相反oldest_slave指的是relay log最落后的slave&lt;/p&gt;
+
+&lt;p&gt;3.2  save_master_binlog, 保存Latest slave到Old master的binlog差异数据, 如图中蓝色部分. 由于master可能是硬件故障等, 不一定能响应save_master_binlog, 所以蓝色部分不一定能保存下来. 若失败, 之后的步骤中用到蓝色部分的地方都可以忽略, 最终结果也是会有部分数据的丢失&lt;/p&gt;
+
+&lt;p&gt;3.3.1  find_latest_base_slave, 这里最理想的状况是能从所有的latest slave中能找到一个relay log可以用于补齐oldest slave的 （如果oldest slave可以被补齐, 那其他的slave都可以被补齐）. 如场景图中所示，Slave 0可以作为latest_base_slave.&lt;/p&gt;
+
+&lt;p&gt;另一种情况是不能用于补齐oldest slave, 比如下图的状况, 集群里最全最新的relay log也无法和oldest slave对接上. 这种情况的处理跟ignore_fail配置有关, 若所有努力都失败只好failover失败&lt;/p&gt;
+
+&lt;p&gt;关于ignore_fail的处理逻辑，可参看源码或者文后我附的源码笔记
+&lt;img src=&#34;../../blog-img/2013-10-14-mha-failover-2.png&#34; alt=&#34;img&#34; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;3.3.2  select_new_master, 选举new master.&lt;/p&gt;
+
+&lt;p&gt;选举的策略是尽量在candidate slave列表中，尽量在latest slave列表中，不可以在bad列表中. 注意，new master可以不是latest slave, 场景图中列举的是这种情况（尽管应该比较少见）&lt;/p&gt;
+
+&lt;p&gt;3.3.3  recover_master. 将差异数据补齐到new master, 让new master成为集群里数据最全最新的节点.&lt;/p&gt;
+
+&lt;p&gt;生成old_master上exec relay_log到read relay_log的差异数据（原因是sql thread落后于io thread）, 源码中中称为diff_from_exec_to_read, 如图中绿色部分.&lt;/p&gt;
+
+&lt;p&gt;生成old_master到latest_base_slave的差异数据(MasterFailover@recover_relay_logs), 如图中黄色部分.&lt;/p&gt;
+
+&lt;p&gt;重放: 在old_master上重放绿色部分, 然后重放黄色部分(MasterFailover@send_binlog &amp;amp; MasterFailover@recover_slave), 最后重放蓝色部分（MasterFailover@apply_diff）&lt;/p&gt;
+
+&lt;p&gt;4  对所有的slave, 这里是以old_slave为例, 与recover_master类似：生成diff_from_exec_to_read（黑色部分）, 生成与latest_base_slave的差异数据（红色部分）. 然后重放黑色部分，红色部分和蓝色部分. (MasterFailover@recover_slaves)&lt;/p&gt;
+
+&lt;p&gt;最后让所有slave连到新的master上&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_3&#34;&gt;一点说明&lt;/h2&gt;
+
+&lt;ol&gt;
+&lt;li&gt;只是简单记录了failover的基本操作, 仅在2.1里说明了stop io thread. 代码中其他操作如change master的操作可以直接翻代码翻到, 不穷举&lt;/li&gt;
+&lt;li&gt;我阅读代码的原始笔记放在&lt;a href=&#34;https://app.yinxiang.com/shard/s11/sh/565c2973-fae1-452c-9f3e-8418fbb04360/11b9fd4b99229f8599c8c96a7bc3c72e&#34;&gt;evernote公开页面&lt;/a&gt;, 里面有一些细节, 不再整理&lt;/li&gt;
+&lt;/ol&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

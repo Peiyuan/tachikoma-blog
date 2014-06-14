@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Jre on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/jre/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Fri, 11 Oct 2013 22:03:00 UTC</updated>
+    
+    <item>
+      <title>jruby backtick &#43; jre 6 会卡住</title>
+      <link>http://ikarishinjieva.github.io/post/2013-10-11-jruby-175-jre-6-stdin-bug</link>
+      <pubDate>Fri, 11 Oct 2013 22:03:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-10-11-jruby-175-jre-6-stdin-bug</guid>
+      <description>
+
+&lt;p&gt;最近在jruby 1.7.5 + jre 6上碰到的土亢&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;现象&lt;/h2&gt;
+
+&lt;p&gt;用backtick调用命令，比如&lt;code&gt;./some_script&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;在调用命令之前/同时在terminal输入一些回车，有一定概率backtick的调用会卡住不返回。
+此时再输入一个回车，调用会继续执行并返回。&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;解决&lt;/h2&gt;
+
+&lt;p&gt;一切靠猜&lt;/p&gt;
+
+&lt;p&gt;jruby有个bug：&lt;a href=&#34;http://jira.codehaus.org/browse/JRUBY-4626&#34;&gt;Gaps in STDIN pipe stream if backtick is used&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;Charles Oliver Nutter在comment中写到&amp;rdquo;For JRuby 1.7pre1 on Java 7, this should be fixed; TTY should be handled correctly. For other Java versions, we can&amp;rsquo;t fix this.&amp;ldquo;，于是最方便的就是升级jre到7&lt;/p&gt;
+
+&lt;p&gt;经验证升级jre可以从土亢中爬出来。
+如果难以升级jre，参看&lt;a href=&#34;https://www.ruby-forum.com/topic/4413754&#34;&gt;这里&lt;/a&gt;，这个兄弟做了很全的测试。可以用IO.popen或者Open3.popen3替换backtick。&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;经验&lt;/h2&gt;
+
+&lt;p&gt;jruby有坑，同时也提供了便捷的手段将现有的java项目改成比较爽的样子。这些坑是难以预料的，做好准备，然后一如既往踩过去。&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

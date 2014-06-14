@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> Mysql rpl_master.cc:mysql_binlog_send 源码的一些个人分析和吐槽 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+
+<div class="content container">
+<div class="post">
+  <h1>Mysql rpl_master.cc:mysql_binlog_send 源码的一些个人分析和吐槽</h1>
+  <span class="post-date">Wed, Oct 16, 2013      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/mysql">mysql</a> </li>
+      
+        <li><a href="tags/replication">replication</a> </li>
+      
+    </ul></span>
+      
+
+<p>读了两天rpl_master.cc:mysql_binlog_send的源码（Mysql 5.6.11），总结一下</p>
+
+<p>函数的入口是rpl_master.cc:com_binlog_dump，当slave向master请求数据时，在master上调用</p>
+
+<p>函数参数说明: <br/>log_ident为slave请求的binlog文件名，如&rdquo;mysql-bin.000001&rdquo;<br/>pos为slave请求的binlog位置<br/>slave_gtid_executed为gtid相关，在此忽略</p>
+
+<p>在此吐槽：</p>
+
+<ol>
+<li>这个函数将近1k行，且缩进混乱，代码折叠困难。最后附的我的笔记中，有整理好的源码下载</li>
+<li>这个函数有两大段近百行的重复代码（1179 &amp; 1553）</li>
+</ol>
+
+<h2 id="toc_0">源码的主体结构</h2>
+
+<pre><code>mysql_binlog_send(…)
+{
+     0814 … bla bla
+     1011 fake_rotate_event
+     1028 max_alloed_packet= MAX_MAX_ALLOWED_PACKET
+     1038 if (请求的POS不是从binlog开头开始)
+     1039 {
+               从binlog开头中找到一个FD event(FORMAT_DESCRIPTION_EVENT), 并发送给slave
+     1123 }
+     1124 else
+     1125 {
+               FD event可以从正常的replication中传送给slave，此处不做操作
+     1127 }
+     1132 while (net和the都在运转)
+     1133 {
+     1143      while (从binlog中读取一个event)
+     1144      {
+     1178           switch (event_type)
+     1179           {
+                         分类型处理event
+     1281           }
+     1283           若event需跳转到下一个binlog(goto_next_binlog), break
+     1291           fire HOOK before_send_event
+     1300           记录skip_group
+     1306           {
+                         send last skip group heartbeat?
+     1326           }
+     1331           向slave发送event
+     1348           {
+                         处理LOAD_EVENT
+     1356           }
+     1358           fire HOOK after_send_event
+     1369      }
+     1391      if (!goto_next_binlog)
+     1392      {
+                   发送完所有binlog，未发生binlog切换时
+     1437          加锁尝试再读取一个event（此时其他进程不能更新binlog），目的是试探之前处理过程中master上是否有更多的binlog写入，若有，则跳转1553处理read_packet
+     1451          若没有更多的binlog 
+                   {
+                        等待更多的binlog写入，等待时发送心跳
+     1545          }
+     1553          处理read_packet
+                   {                         
+                        分类型处理event
+     1682          }
+     1683      }
+     1685      if (goto_next_binlog)
+               {
+                    切换到下一个binlog
+               }
+     1733 }
+     1735 之后是收尾处理
+}
+</code></pre>
+
+<h2 id="toc_1">重点步骤</h2>
+
+<ol>
+<li>补发Format Description event。<br/>如果传送从binlog开头开始，那么FD event会正常随着binlog传送；<br/>若传送不从binlog开头开始，则需要补发一个FD event，才开始传送</li>
+<li>如何判断binlog读取完<br/>函数先不加锁读取binlog中的event，读完后，再加锁尝试读取一个event（加锁过程中，没有其他进程写进binlog），若有数据，则继续处理，若没有数据，则说明binlog读取完了，master会阻塞等待新的binlog写入。<br/>这样做主要为了：<br/>1. 不需要一直加锁读取binlog，保障性能；<br/>2. 无锁读取时会有其他进程写binlog，加锁可以保障这些新加的binlog得到妥善安置</li>
+<li>心跳<br/>仅在不传送binlog时（master穷尽了binlog，开始阻塞等待新的binlog写入时）才进行心跳</li>
+<li>Fake Rotate Event<br/>Fake Rotate Event在开始传送和切换binlog时发送到slave。主要作用是通知slave binlog filename，原因在源码comment里写的很清楚。但是很疑惑的是为什么在FD event里并没有binlog filename，这个问题发到了<a href="http://stackoverflow.com/questions/19375951/in-mysql-replication-why-format-description-event-doesnt-include-binlogs-name">StackoverFlow</a>，未有答案。（诶，看看我的stackoverflow的记录就知道，我的问题都是死题）</li>
+</ol>
+
+<h2 id="toc_2">TODO</h2>
+
+<p>有一些东西还是没弄懂，得慢慢读懂其他机制才可以，比如</p>
+
+<ol>
+<li>max_alloed_packet是如何作用的</li>
+<li>send last skip group heartbeat的作用</li>
+<li>不同类型的event的具体处理，需要和slave端结合在一起</li>
+</ol>
+
+<h2 id="toc_3">我的笔记</h2>
+
+<p>我的笔记<a href="https://app.yinxiang.com/shard/s11/sh/f23e9619-9c3d-47f5-a911-8945d0ee02a5/f4eb8539fb2f99e1481496c994b2c270">在此</a></p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

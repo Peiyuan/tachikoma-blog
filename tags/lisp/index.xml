@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Lisp on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/lisp/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Tue, 16 Apr 2013 23:12:00 UTC</updated>
+    
+    <item>
+      <title>lisp一个大写的坑</title>
+      <link>http://ikarishinjieva.github.io/post/2013-04-16-lisp-symbol-upper-case</link>
+      <pubDate>Tue, 16 Apr 2013 23:12:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-04-16-lisp-symbol-upper-case</guid>
+      <description>&lt;p&gt;最近一直掉在一个坑里，今天刚出坑&lt;/p&gt;
+
+&lt;p&gt;想用宏定义不同的函数，类似于:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;(defmacro macro (name)
+       `(defmethod ,(intern (format nil &amp;quot;set-~a&amp;quot; name)) ()))
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;跑(macro test)，结果就是&lt;/p&gt;
+
+&lt;p&gt;(函数名是&amp;rdquo;|set-TEST|&amp;ldquo;，而不是需要的&amp;rdquo;set-test&amp;rdquo;)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#&amp;lt;STANDARD-METHOD |set-TEST| NIL&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;几天的困惑以后（尝试换过lisp的实现去测试），找到了&lt;a href=&#34;http://www.cs.rochester.edu/~schubert/247-447/symbols-in-lisp.html&#34;&gt;这篇文章&lt;/a&gt;，发现是符号名大小写引起的问题&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;CL-USER&amp;gt; (eq (intern &amp;quot;test&amp;quot;) &#39;test)
+NIL
+CL-USER&amp;gt; (intern &amp;quot;test&amp;quot;)
+|test|
+:INTERNAL
+CL-USER&amp;gt; (eq (intern &amp;quot;TEST&amp;quot;) &#39;test)
+T
+CL-USER&amp;gt; (intern &amp;quot;TEST&amp;quot;)
+TEST
+:INTERNAL
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;大小写通过intern生成的符号是不一样的，全大写才会生成正确的符号。&lt;/p&gt;
+
+&lt;p&gt;参考：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://www.cs.rochester.edu/~schubert/247-447/symbols-in-lisp.html&#34;&gt;How to handle symbols in LISP&lt;/a&gt;&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>略学习Lisp的quote和backquote</title>
+      <link>http://ikarishinjieva.github.io/post/2013-03-18-lisp-quote-backquote</link>
+      <pubDate>Mon, 18 Mar 2013 23:59:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-03-18-lisp-quote-backquote</guid>
+      <description>&lt;p&gt;略学习了lisp里面奇怪的符号集，解释这些符号上，人类的语言基本是苍白的。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://www.lispworks.com/documentation/HyperSpec/Body/02_df.htm&#34;&gt;第一份参考&lt;/a&gt;来自lispworks的文档，对[`&amp;lsquo;@,]这几种符号做了定义。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://wenku.it168.com/d_000648782.shtml&#34;&gt;第二份中文参考&lt;/a&gt; 被到处抄袭。对quote和backquote做了很好的中文说明，嵌套quote部分惨不忍睹。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://stackoverflow.com/questions/7549550/using-two-backquotes-and-commas-common-lisp&#34;&gt;第三份参考&lt;/a&gt; 对嵌套quote做了很好地解释。&lt;/p&gt;
+
+&lt;p&gt;贴一些自己的学习代码&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;CL-USER&amp;gt; (list 1 2)
+(1 2)
+CL-USER&amp;gt; &#39;(1 2)
+(1 2) ;Quote act as list
+CL-USER&amp;gt; `(1 2)
+(1 2) ;Backquote act as list
+
+CL-USER&amp;gt; (let ((x 1)) &#39;(,x))
+; Evaluation aborted on #&amp;lt;CCL::SIMPLE-READER-ERROR #xC78878E&amp;gt;. ;Quote can&#39;t work with comma
+CL-USER&amp;gt; (let ((x 1)) `(,x))
+(1) ;Backquote can work with comma
+
+CL-USER&amp;gt; (let ((x `(1 2))) `(,@x))
+(1 2) ;BackQuote can work with comma-at-sign
+
+CL-USER&amp;gt; (let ((x `(1 2))) `(,x))
+((1 2)) ;x will not be &amp;quot;expand&amp;quot; when use comma instead of comma-at-sign
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>在读lisp入门</title>
+      <link>http://ikarishinjieva.github.io/post/2013-02-28-lisp-book</link>
+      <pubDate>Thu, 28 Feb 2013 00:20:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-02-28-lisp-book</guid>
+      <description>&lt;p&gt;花了几天时间在读&lt;a href=&#34;http://book.douban.com/subject/11238123&#34;&gt;lisp的入门&lt;/a&gt;。&lt;/p&gt;
+
+&lt;p&gt;是本写得十分中肯的语言书。冗长，事无巨细，配图和代码样例精准。就算不看冗长的英文只看代码样例，也能了解个大概。对lisp辅助工具的介绍非常详尽，就算是programming ruby也没达到这个程度。习题丰富。&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

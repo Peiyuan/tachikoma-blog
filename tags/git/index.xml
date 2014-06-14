@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Git on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/git/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Thu, 21 Feb 2013 21:10:00 UTC</updated>
+    
+    <item>
+      <title>Git入门</title>
+      <link>http://ikarishinjieva.github.io/post/2013-02-21-git-study</link>
+      <pubDate>Thu, 21 Feb 2013 21:10:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-02-21-git-study</guid>
+      <description>&lt;p&gt;花了两天完成&lt;a href=&#34;http://pcottle.github.com/learnGitBranching&#34;&gt;这个教程&lt;/a&gt;。作为git的入门非常好。&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

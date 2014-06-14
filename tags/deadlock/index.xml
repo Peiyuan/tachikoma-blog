@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Deadlock on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/deadlock/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Fri, 11 Oct 2013 21:21:00 UTC</updated>
+    
+    <item>
+      <title>mysql 5.6.15 replication中碰到的死锁</title>
+      <link>http://ikarishinjieva.github.io/post/2013-10-11-hole-in-mysql-56-replication-dead-lock</link>
+      <pubDate>Fri, 11 Oct 2013 21:21:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/post/2013-10-11-hole-in-mysql-56-replication-dead-lock</guid>
+      <description>
+
+&lt;p&gt;简述下今天在mysql 5.6.15上碰到的土亢&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_0&#34;&gt;现象&lt;/h2&gt;
+
+&lt;p&gt;mysql开启主从复制时，用meb（MySQL Enterprise Backup）做备份会卡住。同时在slave上show slave status也会卡住。&lt;/p&gt;
+
+&lt;p&gt;查看slave上show processlist，可以看到sql thread的状态为 &amp;ldquo;Waiting for commit lock&amp;rdquo;&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_1&#34;&gt;猜测&lt;/h2&gt;
+
+&lt;p&gt;无论是&amp;rdquo;SHOW ENGINE INNODB STATUS&amp;rdquo;还是&amp;rdquo;SHOW OPEN TABLES&amp;rdquo;都没有提供有用的信息，还是一切靠猜&lt;/p&gt;
+
+&lt;p&gt;夜观天象猜到mysql存在bug &lt;a href=&#34;http://bugs.mysql.com/bug.php?id=70307&#34;&gt;&amp;ldquo;Another deadlock on FLUSH TABLES WITH READ LOCK + SHOW SLAVE STATUS&amp;rdquo;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中描述了sql thread开始执行了transaction，但是没有commit的间隙，在slave上FLUSH TABLES WITH READ LOCK，会出现死锁&lt;/p&gt;
+
+&lt;p&gt;于是猜测，如果meb恰好在slave上某个transaction commit之前做了FLUSH TABLES WITH READ LOCK，然后调用了与&amp;rdquo;SHOW SLAVE STATUS&amp;rdquo;类似的机制获取slave info，那么就会如bug所述卡住。然后mysql由于TABLE LOCk的存在，sql thread也就会卡住。&lt;/p&gt;
+
+&lt;p&gt;BTW：搜一下mysql bug库，会有一些描述类似的bug，其中70307描述最靠谱，且有详细的&lt;a href=&#34;http://bugs.mysql.com/file.php?id=20542&#34;&gt;重现步骤&lt;/a&gt;，我也成功在mysql 5.6.15上重现了bug。&lt;/p&gt;
+
+&lt;h2 id=&#34;toc_2&#34;&gt;结果&lt;/h2&gt;
+
+&lt;p&gt;实验后证明猜对了&amp;hellip;&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>
