@@ -11,10 +11,10 @@
     
     <item>
       <title>Java off-heap的一些参考</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/java-off-heap%E7%9A%84%E4%B8%80%E4%BA%9B%E5%8F%82%E8%80%83/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-05-18-java-offheap-memory</link>
       <pubDate>Sat, 18 May 2013 23:00:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/java-off-heap%E7%9A%84%E4%B8%80%E4%BA%9B%E5%8F%82%E8%80%83/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-05-18-java-offheap-memory</guid>
       <description>&lt;p&gt;读了Hazelcast的文档，很有意思的部分是&amp;rdquo;Elastic Memory&amp;rdquo;，为了减少GC，用到了java off-heap(off-heap允许Java直接操作内存空间, 类似于C的malloc和free)。之前孤陋寡闻，记录一些off-heap的参考。&lt;/p&gt;
 
 &lt;p&gt;.1.做了以下对比试验，来对比Heap和Non-heap&lt;/p&gt;

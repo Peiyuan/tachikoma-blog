@@ -11,10 +11,10 @@
     
     <item>
       <title>测试Mysql临时表的binlog</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E6%B5%8B%E8%AF%95mysql%E4%B8%B4%E6%97%B6%E8%A1%A8%E7%9A%84binlog/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-06-12-temporary-table-binlog</link>
       <pubDate>Thu, 12 Jun 2014 22:30:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E6%B5%8B%E8%AF%95mysql%E4%B8%B4%E6%97%B6%E8%A1%A8%E7%9A%84binlog/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-06-12-temporary-table-binlog</guid>
       <description>
 
 &lt;p&gt;在Mysql 5.6.17上测试临时表生成的binlog&lt;/p&gt;
@@ -769,10 +769,10 @@ ERROR 1787 (HY000): When @@GLOBAL.ENFORCE_GTID_CONSISTENCY = 1, the statements C
     
     <item>
       <title>PREVIOUS_GTIDS_LOG_EVENT的格式</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/previous_gtids_log_event%E7%9A%84%E6%A0%BC%E5%BC%8F/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-04-17-previous_gtids_log_event</link>
       <pubDate>Thu, 17 Apr 2014 22:08:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/previous_gtids_log_event%E7%9A%84%E6%A0%BC%E5%BC%8F/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-04-17-previous_gtids_log_event</guid>
       <description>&lt;p&gt;并没找到特别好的对&lt;code&gt;PREVIOUS_GTIDS_LOG_EVENT&lt;/code&gt;格式的描述, 自己写一个&lt;/p&gt;
 
 &lt;p&gt;据下面这个例子, 是&lt;code&gt;mysqlbinlog&lt;/code&gt;的分析结果&lt;/p&gt;
@@ -892,10 +892,10 @@ ERROR 1787 (HY000): When @@GLOBAL.ENFORCE_GTID_CONSISTENCY = 1, the statements C
     
     <item>
       <title>mysql, 利用假master重放binlog</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/mysql-%E5%88%A9%E7%94%A8%E5%81%87master%E9%87%8D%E6%94%BEbinlog/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-03-26-mysql-fake-master-server</link>
       <pubDate>Wed, 26 Mar 2014 20:08:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/mysql-%E5%88%A9%E7%94%A8%E5%81%87master%E9%87%8D%E6%94%BEbinlog/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-03-26-mysql-fake-master-server</guid>
       <description>
 
 &lt;h2 id=&#34;toc_0&#34;&gt;场景&lt;/h2&gt;
@@ -1073,10 +1073,10 @@ ERROR 1787 (HY000): When @@GLOBAL.ENFORCE_GTID_CONSISTENCY = 1, the statements C
     
     <item>
       <title>关于Mysql binlog的一点学习</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E5%85%B3%E4%BA%8Emysql-binlog%E7%9A%84%E4%B8%80%E7%82%B9%E5%AD%A6%E4%B9%A0/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-05-12-mysql-binlog-study</link>
       <pubDate>Sun, 12 May 2013 22:59:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E5%85%B3%E4%BA%8Emysql-binlog%E7%9A%84%E4%B8%80%E7%82%B9%E5%AD%A6%E4%B9%A0/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-05-12-mysql-binlog-study</guid>
       <description>
 
 &lt;p&gt;差不多一个月没更新了。除了忙些琐事，就是偷点懒。&lt;/p&gt;

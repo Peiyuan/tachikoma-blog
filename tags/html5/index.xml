@@ -11,10 +11,10 @@
     
     <item>
       <title>读了“There is no simple solution for local storage”</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E8%AF%BB%E4%BA%86there-is-no-simple-solution-for-local-storage/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-03-19-some-readings-about-localstorage</link>
       <pubDate>Tue, 19 Mar 2013 23:35:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E8%AF%BB%E4%BA%86there-is-no-simple-solution-for-local-storage/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-03-19-some-readings-about-localstorage</guid>
       <description>&lt;p&gt;作为一个非专职Client开发,偶然读了读关于localStorage的&lt;a href=&#34;http://www.36ria.com/6075&#34;&gt;这篇有趣的文字&lt;/a&gt;,非常有意思,引文也很值得一读。&lt;/p&gt;
 
 &lt;p&gt;作者的思考方向很全面。摘取其中重要的部分：&lt;/p&gt;

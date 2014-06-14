@@ -11,10 +11,10 @@
     
     <item>
       <title>对mysql table cache的理解</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9mysql-table-cache%E7%9A%84%E7%90%86%E8%A7%A3/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-05-15-mysql-table-cache</link>
       <pubDate>Thu, 15 May 2014 20:59:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9mysql-table-cache%E7%9A%84%E7%90%86%E8%A7%A3/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-05-15-mysql-table-cache</guid>
       <description>
 
 &lt;p&gt;最近读了mysql table_cache部分的一些代码.&lt;/p&gt;

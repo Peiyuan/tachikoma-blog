@@ -11,10 +11,10 @@
     
     <item>
       <title>TProfiler的基本原理</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/tprofiler%E7%9A%84%E5%9F%BA%E6%9C%AC%E5%8E%9F%E7%90%86/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-01-27-tprofiler-basic</link>
       <pubDate>Sun, 27 Jan 2013 23:59:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/tprofiler%E7%9A%84%E5%9F%BA%E6%9C%AC%E5%8E%9F%E7%90%86/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-01-27-tprofiler-basic</guid>
       <description>&lt;p&gt;粗粗看了看taobao &lt;a href=&#34;https://github.com/taobao/TProfiler&#34;&gt;TProfiler&lt;/a&gt;的源码，原理有点意思，java代码的质量属于实习生级，也缺乏测试。&lt;/p&gt;
 
 &lt;p&gt;一些参考：&lt;/p&gt;

@@ -11,10 +11,10 @@
     
     <item>
       <title>对heartbeat φ累积失败检测算法的学习</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9heartbeat-%CF%86%E7%B4%AF%E7%A7%AF%E5%A4%B1%E8%B4%A5%E6%A3%80%E6%B5%8B%E7%AE%97%E6%B3%95%E7%9A%84%E5%AD%A6%E4%B9%A0/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-11-05-accrual-failure-detector</link>
       <pubDate>Tue, 05 Nov 2013 21:50:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E5%AF%B9heartbeat-%CF%86%E7%B4%AF%E7%A7%AF%E5%A4%B1%E8%B4%A5%E6%A3%80%E6%B5%8B%E7%AE%97%E6%B3%95%E7%9A%84%E5%AD%A6%E4%B9%A0/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-11-05-accrual-failure-detector</guid>
       <description>&lt;p&gt;偶尔读到了这篇&amp;rdquo;&lt;a href=&#34;http://blog.csdn.net/chen77716/article/details/6541968&#34;&gt;φ累积失败检测算法&lt;/a&gt;&amp;ldquo;，写的非常不错。藉此了解了这个用于heartbeat检测的算法，在此记录一下我自己理解的简单版本&lt;/p&gt;
 
 &lt;p&gt;heartbeat时我们使用固定的时间限制t0，当heartbeat的返回时长超过t0时，就认为heartbeat失败。这个方法的弊端是：固定的t0是在事先测定的，不会随网络状况的变化而智能变化。φ累积失败检测算法就是要解决这个问题&lt;/p&gt;

@@ -11,10 +11,10 @@
     
     <item>
       <title>MDL_map_partition中对锁的过渡</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/mdl_map_partition%E4%B8%AD%E5%AF%B9%E9%94%81%E7%9A%84%E8%BF%87%E6%B8%A1/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-04-05-mdl_map_partition-lock-split</link>
       <pubDate>Sat, 05 Apr 2014 11:43:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/mdl_map_partition%E4%B8%AD%E5%AF%B9%E9%94%81%E7%9A%84%E8%BF%87%E6%B8%A1/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-04-05-mdl_map_partition-lock-split</guid>
       <description>
 
 &lt;p&gt;在&lt;code&gt;MDL&lt;/code&gt;源码中有一段&lt;code&gt;MDL_map_partition&lt;/code&gt;中对锁的过渡有点意思, 拿出来分析一下&lt;/p&gt;
@@ -128,10 +128,10 @@
     
     <item>
       <title>golang, windows和linux上的文件锁</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/golang-windows%E5%92%8Clinux%E4%B8%8A%E7%9A%84%E6%96%87%E4%BB%B6%E9%94%81/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-03-20-go-file-lock</link>
       <pubDate>Thu, 20 Mar 2014 22:43:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/golang-windows%E5%92%8Clinux%E4%B8%8A%E7%9A%84%E6%96%87%E4%BB%B6%E9%94%81/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-03-20-go-file-lock</guid>
       <description>
 
 &lt;p&gt;直接上代码, &lt;code&gt;LockFile&lt;/code&gt;可以获得一个文件的独占权, 或阻塞等待&lt;/p&gt;

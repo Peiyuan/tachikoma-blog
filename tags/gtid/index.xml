@@ -11,10 +11,10 @@
     
     <item>
       <title>PREVIOUS_GTIDS_LOG_EVENT的格式</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/previous_gtids_log_event%E7%9A%84%E6%A0%BC%E5%BC%8F/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-04-17-previous_gtids_log_event</link>
       <pubDate>Thu, 17 Apr 2014 22:08:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/previous_gtids_log_event%E7%9A%84%E6%A0%BC%E5%BC%8F/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-04-17-previous_gtids_log_event</guid>
       <description>&lt;p&gt;并没找到特别好的对&lt;code&gt;PREVIOUS_GTIDS_LOG_EVENT&lt;/code&gt;格式的描述, 自己写一个&lt;/p&gt;
 
 &lt;p&gt;据下面这个例子, 是&lt;code&gt;mysqlbinlog&lt;/code&gt;的分析结果&lt;/p&gt;

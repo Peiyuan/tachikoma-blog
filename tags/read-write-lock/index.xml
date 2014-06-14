@@ -11,10 +11,10 @@
     
     <item>
       <title>读写锁-读可重入</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E8%AF%BB%E5%86%99%E9%94%81-%E8%AF%BB%E5%8F%AF%E9%87%8D%E5%85%A5/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-03-14-read-write-lock-read-reentrant</link>
       <pubDate>Thu, 14 Mar 2013 21:37:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E8%AF%BB%E5%86%99%E9%94%81-%E8%AF%BB%E5%8F%AF%E9%87%8D%E5%85%A5/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-03-14-read-write-lock-read-reentrant</guid>
       <description>&lt;p&gt;发现&lt;a href=&#34;http://tutorials.jenkov.com/java-concurrency/read-write-locks.html&#34;&gt;这篇文献&lt;/a&gt;描写读写锁和可重入性非常具体。&lt;/p&gt;
 
 &lt;p&gt;尝试实现文章中的读可重入的读写锁：&lt;/p&gt;

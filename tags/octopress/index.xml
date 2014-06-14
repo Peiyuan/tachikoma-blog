@@ -11,10 +11,10 @@
     
     <item>
       <title>octopress win7上遭遇invalid GBK character exception</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/octopress-win7%E4%B8%8A%E9%81%AD%E9%81%87invalid-gbk-character-exception/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-02-04-octopress-chinese-character</link>
       <pubDate>Mon, 04 Feb 2013 21:59:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/octopress-win7%E4%B8%8A%E9%81%AD%E9%81%87invalid-gbk-character-exception/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-02-04-octopress-chinese-character</guid>
       <description>&lt;p&gt;解决方案：
 将markdown文件保存格式设为 UTF-8 without BOM，并
 在环境变量里加上 LC_ALL=zh_CN.UTF-8&lt;/p&gt;

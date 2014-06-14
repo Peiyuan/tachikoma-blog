@@ -11,10 +11,10 @@
     
     <item>
       <title>读了‘谈谈 jQuery 中的防冲突（noConflict）机制’</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E8%AF%BB%E4%BA%86%E8%B0%88%E8%B0%88-jquery-%E4%B8%AD%E7%9A%84%E9%98%B2%E5%86%B2%E7%AA%81noconflict%E6%9C%BA%E5%88%B6/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-03-17-jquery-noconflict</link>
       <pubDate>Sun, 17 Mar 2013 23:49:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E8%AF%BB%E4%BA%86%E8%B0%88%E8%B0%88-jquery-%E4%B8%AD%E7%9A%84%E9%98%B2%E5%86%B2%E7%AA%81noconflict%E6%9C%BA%E5%88%B6/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-03-17-jquery-noconflict</guid>
       <description>&lt;p&gt;文章在此：&lt;a href=&#34;http://ued.taobao.com/blog/2013/03/jquery-noconflict/&#34;&gt;http://ued.taobao.com/blog/2013/03/jquery-noconflict/&lt;/a&gt;&lt;/p&gt;
 
 &lt;p&gt;倒是也没什么大不了的，略感叹jquery的api设计的周到。&lt;/p&gt;

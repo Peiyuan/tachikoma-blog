@@ -11,10 +11,10 @@
     
     <item>
       <title>推荐下我修改的gen</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E6%8E%A8%E8%8D%90%E4%B8%8B%E6%88%91%E4%BF%AE%E6%94%B9%E7%9A%84gen/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-03-02-gen</link>
       <pubDate>Sun, 02 Mar 2014 21:29:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E6%8E%A8%E8%8D%90%E4%B8%8B%E6%88%91%E4%BF%AE%E6%94%B9%E7%9A%84gen/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-03-02-gen</guid>
       <description>
 
 &lt;p&gt;&lt;a href=&#34;http://clipperhouse.github.io/gen/&#34;&gt;&lt;code&gt;gen&lt;/code&gt;&lt;/a&gt;是go的代码生成器, 提供类似于&lt;code&gt;underscore&lt;/code&gt;的函数集.&lt;/p&gt;

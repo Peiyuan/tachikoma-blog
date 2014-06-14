@@ -11,10 +11,10 @@
     
     <item>
       <title>测试Mysql临时表的复制</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E6%B5%8B%E8%AF%95mysql%E4%B8%B4%E6%97%B6%E8%A1%A8%E7%9A%84%E5%A4%8D%E5%88%B6/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-06-12-temporary-table-replication</link>
       <pubDate>Thu, 12 Jun 2014 22:32:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E6%B5%8B%E8%AF%95mysql%E4%B8%B4%E6%97%B6%E8%A1%A8%E7%9A%84%E5%A4%8D%E5%88%B6/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-06-12-temporary-table-replication</guid>
       <description>
 
 &lt;p&gt;测试一下Mysql 5.6.17对临时表的复制&lt;/p&gt;
@@ -347,10 +347,10 @@ mysql-slave&amp;gt; show status like &#39;%open%&#39;;
     
     <item>
       <title>测试Mysql临时表的binlog</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/%E6%B5%8B%E8%AF%95mysql%E4%B8%B4%E6%97%B6%E8%A1%A8%E7%9A%84binlog/</link>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-06-12-temporary-table-binlog</link>
       <pubDate>Thu, 12 Jun 2014 22:30:00 UTC</pubDate>
       
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/%E6%B5%8B%E8%AF%95mysql%E4%B8%B4%E6%97%B6%E8%A1%A8%E7%9A%84binlog/</guid>
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-06-12-temporary-table-binlog</guid>
       <description>
 
 &lt;p&gt;在Mysql 5.6.17上测试临时表生成的binlog&lt;/p&gt;
