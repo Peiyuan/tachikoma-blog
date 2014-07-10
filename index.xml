@@ -19,7 +19,7 @@
 
 &lt;p&gt;初次使用docker, 确实是好东西, 但也碰到一些乱七八糟的错, 记录一下&lt;/p&gt;
 
-&lt;p&gt;###iptables不可用&lt;/p&gt;
+&lt;h3 id=&#34;toc_0&#34;&gt;iptables不可用&lt;/h3&gt;
 
 &lt;p&gt;在container内部使用iptables会碰到如下错误&lt;/p&gt;
 
@@ -39,7 +39,7 @@ Perhaps iptables or your kernel needs to be upgraded.
 
 &lt;p&gt;解决方法是在启动container时加入参数&lt;code&gt;--privileged=true&lt;/code&gt;, 来开启被禁用的能力&lt;/p&gt;
 
-&lt;h3 id=&#34;toc_0&#34;&gt;&lt;code&gt;--privileged=true&lt;/code&gt; 遇到错误&lt;/h3&gt;
+&lt;h3 id=&#34;toc_1&#34;&gt;&lt;code&gt;--privileged=true&lt;/code&gt; 遇到错误&lt;/h3&gt;
 
 &lt;p&gt;在使用&lt;code&gt;docker run --privileged=true ...&lt;/code&gt; 时遇到错误&lt;/p&gt;
 
@@ -60,38 +60,40 @@ Perhaps iptables or your kernel needs to be upgraded.
       <pubDate>Thu, 10 Jul 2014 22:18:00 UTC</pubDate>
       
       <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-07-10-docker-use-host-network</guid>
-      <description>&lt;p&gt;##场景&lt;/p&gt;
+      <description>
+
+&lt;h2 id=&#34;toc_0&#34;&gt;场景&lt;/h2&gt;
 
 &lt;p&gt;Docker的一般使用场景是在container中运行应用, 然后将应用的端口映射到host的端口上&lt;/p&gt;
 
 &lt;p&gt;本文描述的场景是一种特殊的场景, 即container在host的网络上有单独的IP&lt;/p&gt;
 
-&lt;p&gt;##参考&lt;/p&gt;
+&lt;h2 id=&#34;toc_1&#34;&gt;参考&lt;/h2&gt;
 
 &lt;ul&gt;
 &lt;li&gt;&lt;a href=&#34;https://blog.codecentric.de/en/2014/01/docker-networking-made-simple-3-ways-connect-lxc-containers/&#34;&gt;Docker Networking Made Simple or 3 Ways to Connect LXC Containers&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;##步骤&lt;/p&gt;
+&lt;h2 id=&#34;toc_2&#34;&gt;步骤&lt;/h2&gt;
 
 &lt;p&gt;如参考中&lt;code&gt;Integrate Docker Containers into your Host Network&lt;/code&gt;一节描述的, 让container融入host网络的方法是 将docker在host上使用的bridge的IP修改为host网络的IP.&lt;/p&gt;
 
 &lt;p&gt;但此时host上就有两个设备(原设备和bridge)使用同一个网段,造成故障. 需要将原设备的master设为bridge&lt;/p&gt;
 
-&lt;p&gt;#####1. 停掉docker, 删掉原有的bridge &lt;code&gt;docker0&lt;/code&gt;&lt;/p&gt;
+&lt;h5 id=&#34;toc_3&#34;&gt;1. 停掉docker, 删掉原有的bridge &lt;code&gt;docker0&lt;/code&gt;&lt;/h5&gt;
 
 &lt;pre&gt;&lt;code&gt;&amp;gt; service docker stop
 &amp;gt; ifconfig docker0 down
 &amp;gt; brctl delbr docker0
 &lt;/code&gt;&lt;/pre&gt;
 
-&lt;p&gt;#####2. 添加新的bridge &lt;code&gt;bridge0&lt;/code&gt;, 绑定在host网段的ip&lt;/p&gt;
+&lt;h5 id=&#34;toc_4&#34;&gt;2. 添加新的bridge &lt;code&gt;bridge0&lt;/code&gt;, 绑定在host网段的ip&lt;/h5&gt;
 
 &lt;pre&gt;&lt;code&gt;&amp;gt; brctl addbr bridge0
 &amp;gt; ip addr add 192.168.1.99/24 dev bridge0
 &lt;/code&gt;&lt;/pre&gt;
 
-&lt;p&gt;#####3. 将原设备(设为&lt;code&gt;eth0&lt;/code&gt;)的master设为&lt;code&gt;bridge0&lt;/code&gt;&lt;/p&gt;
+&lt;h5 id=&#34;toc_5&#34;&gt;3. 将原设备(设为&lt;code&gt;eth0&lt;/code&gt;)的master设为&lt;code&gt;bridge0&lt;/code&gt;&lt;/h5&gt;
 
 &lt;p&gt;参考上使用的命令是&lt;code&gt;ip link set eth0 master bridge0&lt;/code&gt;, 但在有些系统上会碰到错误:&lt;/p&gt;
 
@@ -103,13 +105,13 @@ Perhaps iptables or your kernel needs to be upgraded.
 &lt;pre&gt;&lt;code&gt;&amp;gt; brctl addif bridge0 eth0
 &lt;/code&gt;&lt;/pre&gt;
 
-&lt;p&gt;#####4. 从原设备&lt;code&gt;eth0&lt;/code&gt;上卸下原有ip, 启用&lt;code&gt;bridge0&lt;/code&gt;&lt;/p&gt;
+&lt;h5 id=&#34;toc_6&#34;&gt;4. 从原设备&lt;code&gt;eth0&lt;/code&gt;上卸下原有ip, 启用&lt;code&gt;bridge0&lt;/code&gt;&lt;/h5&gt;
 
 &lt;pre&gt;&lt;code&gt;&amp;gt; ip addr del 192.168.1.99/24 dev bridge0
 &amp;gt; ifconfig bridge0 up
 &lt;/code&gt;&lt;/pre&gt;
 
-&lt;p&gt;#####5. 搞定.&lt;/p&gt;
+&lt;h5 id=&#34;toc_7&#34;&gt;5. 搞定.&lt;/h5&gt;
 
 &lt;p&gt;如果遇到container无法&lt;code&gt;ping&lt;/code&gt;到其他ip, 记得检查host上的gateway&lt;/p&gt;
 </description>

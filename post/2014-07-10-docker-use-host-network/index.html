@@ -69,38 +69,40 @@ document.write(unescape("%3Cscript src='" + _bdhmProtocol + "hm.baidu.com/h.js%3
         <li><a href="tags/docker">docker</a> </li>
       
     </ul></span>
-      <p>##场景</p>
+      
+
+<h2 id="toc_0">场景</h2>
 
 <p>Docker的一般使用场景是在container中运行应用, 然后将应用的端口映射到host的端口上</p>
 
 <p>本文描述的场景是一种特殊的场景, 即container在host的网络上有单独的IP</p>
 
-<p>##参考</p>
+<h2 id="toc_1">参考</h2>
 
 <ul>
 <li><a href="https://blog.codecentric.de/en/2014/01/docker-networking-made-simple-3-ways-connect-lxc-containers/">Docker Networking Made Simple or 3 Ways to Connect LXC Containers</a></li>
 </ul>
 
-<p>##步骤</p>
+<h2 id="toc_2">步骤</h2>
 
 <p>如参考中<code>Integrate Docker Containers into your Host Network</code>一节描述的, 让container融入host网络的方法是 将docker在host上使用的bridge的IP修改为host网络的IP.</p>
 
 <p>但此时host上就有两个设备(原设备和bridge)使用同一个网段,造成故障. 需要将原设备的master设为bridge</p>
 
-<p>#####1. 停掉docker, 删掉原有的bridge <code>docker0</code></p>
+<h5 id="toc_3">1. 停掉docker, 删掉原有的bridge <code>docker0</code></h5>
 
 <pre><code>&gt; service docker stop
 &gt; ifconfig docker0 down
 &gt; brctl delbr docker0
 </code></pre>
 
-<p>#####2. 添加新的bridge <code>bridge0</code>, 绑定在host网段的ip</p>
+<h5 id="toc_4">2. 添加新的bridge <code>bridge0</code>, 绑定在host网段的ip</h5>
 
 <pre><code>&gt; brctl addbr bridge0
 &gt; ip addr add 192.168.1.99/24 dev bridge0
 </code></pre>
 
-<p>#####3. 将原设备(设为<code>eth0</code>)的master设为<code>bridge0</code></p>
+<h5 id="toc_5">3. 将原设备(设为<code>eth0</code>)的master设为<code>bridge0</code></h5>
 
 <p>参考上使用的命令是<code>ip link set eth0 master bridge0</code>, 但在有些系统上会碰到错误:</p>
 
@@ -112,13 +114,13 @@ document.write(unescape("%3Cscript src='" + _bdhmProtocol + "hm.baidu.com/h.js%3
 <pre><code>&gt; brctl addif bridge0 eth0
 </code></pre>
 
-<p>#####4. 从原设备<code>eth0</code>上卸下原有ip, 启用<code>bridge0</code></p>
+<h5 id="toc_6">4. 从原设备<code>eth0</code>上卸下原有ip, 启用<code>bridge0</code></h5>
 
 <pre><code>&gt; ip addr del 192.168.1.99/24 dev bridge0
 &gt; ifconfig bridge0 up
 </code></pre>
 
-<p>#####5. 搞定.</p>
+<h5 id="toc_7">5. 搞定.</h5>
 
 <p>如果遇到container无法<code>ping</code>到其他ip, 记得检查host上的gateway</p>
 

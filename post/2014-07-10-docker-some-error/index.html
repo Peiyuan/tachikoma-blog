@@ -73,7 +73,7 @@ document.write(unescape("%3Cscript src='" + _bdhmProtocol + "hm.baidu.com/h.js%3
 
 <p>初次使用docker, 确实是好东西, 但也碰到一些乱七八糟的错, 记录一下</p>
 
-<p>###iptables不可用</p>
+<h3 id="toc_0">iptables不可用</h3>
 
 <p>在container内部使用iptables会碰到如下错误</p>
 
@@ -93,7 +93,7 @@ Perhaps iptables or your kernel needs to be upgraded.
 
 <p>解决方法是在启动container时加入参数<code>--privileged=true</code>, 来开启被禁用的能力</p>
 
-<h3 id="toc_0"><code>--privileged=true</code> 遇到错误</h3>
+<h3 id="toc_1"><code>--privileged=true</code> 遇到错误</h3>
 
 <p>在使用<code>docker run --privileged=true ...</code> 时遇到错误</p>
 
