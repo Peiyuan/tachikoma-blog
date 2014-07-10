@@ -3,8 +3,18 @@
   
   <url>
     <loc>http://ikarishinjieva.github.io/</loc>
-    <lastmod>2014-06-12T22:32:00+00:00</lastmod>
+    <lastmod>2014-07-10T22:53:00+00:00</lastmod>
     <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-07-10-docker-some-error</loc>
+    <lastmod>2014-07-10T22:53:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-07-10-docker-use-host-network</loc>
+    <lastmod>2014-07-10T22:18:00+00:00</lastmod>
   </url>
   
   <url>
@@ -88,12 +98,12 @@
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-12-21-paxos-lease-2</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-12-19-paxos-lease</loc>
     <lastmod>2013-12-19T20:19:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-12-19-paxos-lease</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-12-21-paxos-lease-2</loc>
     <lastmod>2013-12-19T20:19:00+00:00</lastmod>
   </url>
   

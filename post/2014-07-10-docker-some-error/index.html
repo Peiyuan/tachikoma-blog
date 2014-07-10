@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> 初次使用Docker碰到的一些问题 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.useso.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/highlight-rainbow.css">
+  <script src="http://ikarishinjieva.github.io/tachikoma-blog/highlight.pack.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+<script type="text/javascript">
+var _bdhmProtocol = (("https:" == document.location.protocol) ? " https://" : " http://");
+document.write(unescape("%3Cscript src='" + _bdhmProtocol + "hm.baidu.com/h.js%3F4c958230261b97d30128c952acd44fc6' type='text/javascript'%3E%3C/script%3E"));
+</script>
+
+
+<div class="content container">
+<div class="post">
+  <h1>初次使用Docker碰到的一些问题</h1>
+  <span class="post-date">Thu, Jul 10, 2014      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/docker">docker</a> </li>
+      
+    </ul></span>
+      
+
+<p>初次使用docker, 确实是好东西, 但也碰到一些乱七八糟的错, 记录一下</p>
+
+<p>###iptables不可用</p>
+
+<p>在container内部使用iptables会碰到如下错误</p>
+
+<pre><code>bash-4.1# /etc/init.d/iptables status
+
+Table: filter
+FATAL: Could not load /lib/modules/2.6.32-358.el6.x86_64/modules.dep: No such file or directory
+iptables v1.4.7: can't initialize iptables table `filter': Permission denied (you must be root)
+Perhaps iptables or your kernel needs to be upgraded.
+Table: nat
+FATAL: Could not load /lib/modules/2.6.32-358.el6.x86_64/modules.dep: No such file or directory
+iptables v1.4.7: can't initialize iptables table `nat': Permission denied (you must be root)
+Perhaps iptables or your kernel needs to be upgraded.
+</code></pre>
+
+<p>查了很久, 发现docker在其<a href="http://blog.docker.com/2013/08/containers-docker-how-secure-are-they/">blog</a>中深藏了其原因 (<code>Linux Kernel Capabilities</code>一节)</p>
+
+<p>解决方法是在启动container时加入参数<code>--privileged=true</code>, 来开启被禁用的能力</p>
+
+<h3 id="toc_0"><code>--privileged=true</code> 遇到错误</h3>
+
+<p>在使用<code>docker run --privileged=true ...</code> 时遇到错误</p>
+
+<pre><code>Error: Cannot start container f4468e2ddd314c572582f2c96022a56e4c45383897495ac117167fa3b4702ed6: stat /dev/.udev/db/bsg:2:0:0:0: no such file or directory
+</code></pre>
+
+<p>这是一个docker 1.0.0的bug, 可以在github的bug列表中找到. 解决方案就很简单, 升级docker到1.1.0就可以</p>
+
+<p>但docker的编译过程会使用<code>--privileged=true</code>这个参数, 导致没法编译docker 1.1.0</p>
+
+<p>幸好docker提供了binary下载, 直接下载1.1.0的binary, 替换<code>/usr/bin/docker</code>就可以了</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

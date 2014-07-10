@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> Docker配置container与host使用同一子网 &middot; Tachikoma blog </title>
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/poole.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/syntax.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/hyde.css">
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/tachikoma.css">
+  <link rel="stylesheet" href="http://fonts.useso.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Tachikoma blog" />
+
+  
+  <link rel="stylesheet" href="http://ikarishinjieva.github.io/tachikoma-blog/css/highlight-rainbow.css">
+  <script src="http://ikarishinjieva.github.io/tachikoma-blog/highlight.pack.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
+</head>
+
+<body>
+
+<div style="position: fixed;bottom: 0px;right:0px;">
+<img src="http://ikarishinjieva.github.io/tachikoma-blog/tachikoma.gif" style="opacity:0.7; filter:alpha(opacity=70);"/>
+</div>
+<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <h2 style="color:rgba(255,255,255,.5)">Tachikoma blog</h2>
+      <p class="lead">
+        <a href="mailto:tac.nil@outlook.com">Email</a> |
+        <a href="http://weibo.com/u/1460219211">Weibo</a> |
+        <a href="https://github.com/ikarishinjieva">Github</a>
+      </p>
+    </div>
+<hr>
+    <ul class="sidebar-nav">
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/">Home</a> </li>
+      <li><a href="http://ikarishinjieva.github.io/tachikoma-blog/tags">Tags</a> </li>
+      
+    </ul>
+
+  </div>
+</div>
+
+<script type="text/javascript">
+var _bdhmProtocol = (("https:" == document.location.protocol) ? " https://" : " http://");
+document.write(unescape("%3Cscript src='" + _bdhmProtocol + "hm.baidu.com/h.js%3F4c958230261b97d30128c952acd44fc6' type='text/javascript'%3E%3C/script%3E"));
+</script>
+
+
+<div class="content container">
+<div class="post">
+  <h1>Docker配置container与host使用同一子网</h1>
+  <span class="post-date">Thu, Jul 10, 2014      
+  	<ul style="float:right; " class="post-tags">
+      
+        <li><a href="tags/docker">docker</a> </li>
+      
+    </ul></span>
+      <p>##场景</p>
+
+<p>Docker的一般使用场景是在container中运行应用, 然后将应用的端口映射到host的端口上</p>
+
+<p>本文描述的场景是一种特殊的场景, 即container在host的网络上有单独的IP</p>
+
+<p>##参考</p>
+
+<ul>
+<li><a href="https://blog.codecentric.de/en/2014/01/docker-networking-made-simple-3-ways-connect-lxc-containers/">Docker Networking Made Simple or 3 Ways to Connect LXC Containers</a></li>
+</ul>
+
+<p>##步骤</p>
+
+<p>如参考中<code>Integrate Docker Containers into your Host Network</code>一节描述的, 让container融入host网络的方法是 将docker在host上使用的bridge的IP修改为host网络的IP.</p>
+
+<p>但此时host上就有两个设备(原设备和bridge)使用同一个网段,造成故障. 需要将原设备的master设为bridge</p>
+
+<p>#####1. 停掉docker, 删掉原有的bridge <code>docker0</code></p>
+
+<pre><code>&gt; service docker stop
+&gt; ifconfig docker0 down
+&gt; brctl delbr docker0
+</code></pre>
+
+<p>#####2. 添加新的bridge <code>bridge0</code>, 绑定在host网段的ip</p>
+
+<pre><code>&gt; brctl addbr bridge0
+&gt; ip addr add 192.168.1.99/24 dev bridge0
+</code></pre>
+
+<p>#####3. 将原设备(设为<code>eth0</code>)的master设为<code>bridge0</code></p>
+
+<p>参考上使用的命令是<code>ip link set eth0 master bridge0</code>, 但在有些系统上会碰到错误:</p>
+
+<pre><code>Error: either &quot;dev&quot; is duplicate, or &quot;master&quot; is a garbage.
+</code></pre>
+
+<p>可以使用</p>
+
+<pre><code>&gt; brctl addif bridge0 eth0
+</code></pre>
+
+<p>#####4. 从原设备<code>eth0</code>上卸下原有ip, 启用<code>bridge0</code></p>
+
+<pre><code>&gt; ip addr del 192.168.1.99/24 dev bridge0
+&gt; ifconfig bridge0 up
+</code></pre>
+
+<p>#####5. 搞定.</p>
+
+<p>如果遇到container无法<code>ping</code>到其他ip, 记得检查host上的gateway</p>
+
+</div>
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+       
+      var disqus_shortname = 'tacsay'; 
+
+       
+      (function() {
+          var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+          dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+          (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+      })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  
+</div>
+
+  </body>
+</html>

@@ -7,7 +7,113 @@
     <language>zh-cn</language>
     
     
-    <updated>Thu, 12 Jun 2014 22:32:00 UTC</updated>
+    <updated>Thu, 10 Jul 2014 22:53:00 UTC</updated>
+    
+    <item>
+      <title>初次使用Docker碰到的一些问题</title>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-07-10-docker-some-error</link>
+      <pubDate>Thu, 10 Jul 2014 22:53:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-07-10-docker-some-error</guid>
+      <description>
+
+&lt;p&gt;初次使用docker, 确实是好东西, 但也碰到一些乱七八糟的错, 记录一下&lt;/p&gt;
+
+&lt;p&gt;###iptables不可用&lt;/p&gt;
+
+&lt;p&gt;在container内部使用iptables会碰到如下错误&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;bash-4.1# /etc/init.d/iptables status
+
+Table: filter
+FATAL: Could not load /lib/modules/2.6.32-358.el6.x86_64/modules.dep: No such file or directory
+iptables v1.4.7: can&#39;t initialize iptables table `filter&#39;: Permission denied (you must be root)
+Perhaps iptables or your kernel needs to be upgraded.
+Table: nat
+FATAL: Could not load /lib/modules/2.6.32-358.el6.x86_64/modules.dep: No such file or directory
+iptables v1.4.7: can&#39;t initialize iptables table `nat&#39;: Permission denied (you must be root)
+Perhaps iptables or your kernel needs to be upgraded.
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;查了很久, 发现docker在其&lt;a href=&#34;http://blog.docker.com/2013/08/containers-docker-how-secure-are-they/&#34;&gt;blog&lt;/a&gt;中深藏了其原因 (&lt;code&gt;Linux Kernel Capabilities&lt;/code&gt;一节)&lt;/p&gt;
+
+&lt;p&gt;解决方法是在启动container时加入参数&lt;code&gt;--privileged=true&lt;/code&gt;, 来开启被禁用的能力&lt;/p&gt;
+
+&lt;h3 id=&#34;toc_0&#34;&gt;&lt;code&gt;--privileged=true&lt;/code&gt; 遇到错误&lt;/h3&gt;
+
+&lt;p&gt;在使用&lt;code&gt;docker run --privileged=true ...&lt;/code&gt; 时遇到错误&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Error: Cannot start container f4468e2ddd314c572582f2c96022a56e4c45383897495ac117167fa3b4702ed6: stat /dev/.udev/db/bsg:2:0:0:0: no such file or directory
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;这是一个docker 1.0.0的bug, 可以在github的bug列表中找到. 解决方案就很简单, 升级docker到1.1.0就可以&lt;/p&gt;
+
+&lt;p&gt;但docker的编译过程会使用&lt;code&gt;--privileged=true&lt;/code&gt;这个参数, 导致没法编译docker 1.1.0&lt;/p&gt;
+
+&lt;p&gt;幸好docker提供了binary下载, 直接下载1.1.0的binary, 替换&lt;code&gt;/usr/bin/docker&lt;/code&gt;就可以了&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Docker配置container与host使用同一子网</title>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-07-10-docker-use-host-network</link>
+      <pubDate>Thu, 10 Jul 2014 22:18:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-07-10-docker-use-host-network</guid>
+      <description>&lt;p&gt;##场景&lt;/p&gt;
+
+&lt;p&gt;Docker的一般使用场景是在container中运行应用, 然后将应用的端口映射到host的端口上&lt;/p&gt;
+
+&lt;p&gt;本文描述的场景是一种特殊的场景, 即container在host的网络上有单独的IP&lt;/p&gt;
+
+&lt;p&gt;##参考&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&#34;https://blog.codecentric.de/en/2014/01/docker-networking-made-simple-3-ways-connect-lxc-containers/&#34;&gt;Docker Networking Made Simple or 3 Ways to Connect LXC Containers&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;##步骤&lt;/p&gt;
+
+&lt;p&gt;如参考中&lt;code&gt;Integrate Docker Containers into your Host Network&lt;/code&gt;一节描述的, 让container融入host网络的方法是 将docker在host上使用的bridge的IP修改为host网络的IP.&lt;/p&gt;
+
+&lt;p&gt;但此时host上就有两个设备(原设备和bridge)使用同一个网段,造成故障. 需要将原设备的master设为bridge&lt;/p&gt;
+
+&lt;p&gt;#####1. 停掉docker, 删掉原有的bridge &lt;code&gt;docker0&lt;/code&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;gt; service docker stop
+&amp;gt; ifconfig docker0 down
+&amp;gt; brctl delbr docker0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;#####2. 添加新的bridge &lt;code&gt;bridge0&lt;/code&gt;, 绑定在host网段的ip&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;gt; brctl addbr bridge0
+&amp;gt; ip addr add 192.168.1.99/24 dev bridge0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;#####3. 将原设备(设为&lt;code&gt;eth0&lt;/code&gt;)的master设为&lt;code&gt;bridge0&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;参考上使用的命令是&lt;code&gt;ip link set eth0 master bridge0&lt;/code&gt;, 但在有些系统上会碰到错误:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Error: either &amp;quot;dev&amp;quot; is duplicate, or &amp;quot;master&amp;quot; is a garbage.
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以使用&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;gt; brctl addif bridge0 eth0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;#####4. 从原设备&lt;code&gt;eth0&lt;/code&gt;上卸下原有ip, 启用&lt;code&gt;bridge0&lt;/code&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;gt; ip addr del 192.168.1.99/24 dev bridge0
+&amp;gt; ifconfig bridge0 up
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;#####5. 搞定.&lt;/p&gt;
+
+&lt;p&gt;如果遇到container无法&lt;code&gt;ping&lt;/code&gt;到其他ip, 记得检查host上的gateway&lt;/p&gt;
+</description>
+    </item>
     
     <item>
       <title>测试Mysql临时表的复制</title>
@@ -2335,140 +2441,6 @@ void ha_reset_slave(THD *thd);
 &lt;p&gt;可以看到Mysql plugin不&lt;strong&gt;太&lt;/strong&gt;预留接口, 是仅仅为已知应用场景提供必要接口, 比如&lt;code&gt;Binlog_relay_IO_observer&lt;/code&gt;中有&lt;code&gt;after&lt;/code&gt;不一定有&lt;code&gt;before&lt;/code&gt;. 比较容易控制插件质量, 但插件能做到的非常局限.&lt;/p&gt;
 
 &lt;p&gt;以上各种尝试, 归根到底, 只要修改Mysql的一点源码编译一下就可以达到很好的效果, 不需要用插件的方式在Mysql中到处找功能插槽, 但通用性变差.&lt;/p&gt;
-</description>
-    </item>
-    
-    <item>
-      <title>编译mysql插件的碰到的问题</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-01-28-compile-mysql-plugin</link>
-      <pubDate>Tue, 28 Jan 2014 16:48:00 UTC</pubDate>
-      
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-01-28-compile-mysql-plugin</guid>
-      <description>&lt;p&gt;最近尝试制作了&lt;a href=&#34;https://github.com/ikarishinjieva/mysql_plugin-binlog_dump_list&#34;&gt;一个mysql的插件&lt;/a&gt;. 对c/c++的编译不熟, 又是第一次尝试做mysql插件, 编译过程中碰到些状况&lt;/p&gt;
-
-&lt;p&gt;编写好mysql插件后, 编译成功, 在mysql中安装运行报错: 取了&lt;code&gt;threads&lt;/code&gt;中的THD, 其中THD-&amp;gt;thread_id值为空&lt;/p&gt;
-
-&lt;p&gt;由于是mysql内置的数据结构, 一时没了头绪, 只能通过gdb连上去看看&lt;/p&gt;
-
-&lt;p&gt;发现plugin打印出来的thread_id距离THD开头的距离为&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;tmp=0x3661f80
-&amp;amp;tmp-&amp;gt;thread_id=0x36637b0
-delta = 0x1830
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;而gdb打印出来的距离为&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;(gdb) p tmp
-$1 = (THD *) 0x3661f80
-(gdb) p &amp;amp;tmp-&amp;gt;thread_id
-$2 = (my_thread_id *) 0x3663878
-delta = 0x18F8
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;结论很显然, plugin编译的THD结构和mysqld的THD结构不匹配, 即plugin的编译参数和mysqld的编译参数不一样.&lt;/p&gt;
-
-&lt;p&gt;当然mysql的文档上只会说一句大意是 &amp;ldquo;&lt;strong&gt;编译参数应当设置成一样的&lt;/strong&gt;&amp;ldquo;的话&lt;/p&gt;
-
-&lt;p&gt;其中比较重要的几个编译选项&lt;/p&gt;
-
-&lt;ol&gt;
-&lt;li&gt;DBUG_ON&lt;/li&gt;
-&lt;li&gt;SAFE_MUTEX&lt;/li&gt;
-&lt;li&gt;DBUG_OFF (不设置DBUG_ON并不等于DBUG_OFF)&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;这几个选项会影响当使用mysqld内部数据结构的长度, 不排除还有其他&lt;/p&gt;
-</description>
-    </item>
-    
-    <item>
-      <title>jruby中tcp阻塞时Timeout::timeout失效</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-01-08-jruby-bug-tcp-timeout</link>
-      <pubDate>Wed, 08 Jan 2014 23:04:00 UTC</pubDate>
-      
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-01-08-jruby-bug-tcp-timeout</guid>
-      <description>
-
-&lt;h2 id=&#34;toc_0&#34;&gt;问题场景&lt;/h2&gt;
-
-&lt;p&gt;首先有一台tcp server, 模拟一个黑洞&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;require &#39;socket&#39;
-
-tcp_server = TCPServer.new(&amp;quot;0.0.0.0&amp;quot;, 6666)
-
-loop do
-     socket = tcp_server.accept
-     puts &#39;got conn&#39;]
-     #blackhole
-end
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;然后发起一个connection, 从server接受消息(很显然会阻塞在recv上), 并用&lt;code&gt;Timeout::timeout&lt;/code&gt;设置一个超时时间&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;require &amp;quot;socket&amp;quot;
-require &amp;quot;timeout&amp;quot;
-
-sock = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM, 0)
-addr = Socket.sockaddr_in(6666, &amp;quot;127.0.0.1&amp;quot;)
-sock.connect(addr)
-
-Timeout::timeout(5) {
-     sock.recv(1)
-} 
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;上面这个场景如果在ruby上跑,5秒后会超时,但如果使用jruby(1.7.6)就会一直处于阻塞&lt;/p&gt;
-
-&lt;h2 id=&#34;toc_1&#34;&gt;解决方案&lt;/h2&gt;
-
-&lt;p&gt;使用非阻塞&lt;code&gt;recv&lt;/code&gt;,可以在jruby上正常运行&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;require &amp;quot;socket&amp;quot;
-require &amp;quot;timeout&amp;quot;
-
-sock = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM, 0)
-addr = Socket.sockaddr_in(6666, &amp;quot;127.0.0.1&amp;quot;)
-sock.connect(addr)
-
-Timeout::timeout(5) {
-    begin
-        sock.recv_nonblock(1)
-    rescue IO::WaitReadable
-        IO.select([sock],nil,nil,5)
-        retry
-    end
-} 
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;h2 id=&#34;toc_2&#34;&gt;猜测&lt;/h2&gt;
-
-&lt;p&gt;查看一下ruby &lt;code&gt;timeout.rb&lt;/code&gt;的源码&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;  begin
-    x = Thread.current
-    y = Thread.start {
-      begin
-        sleep sec
-      rescue =&amp;gt; e
-        x.raise e
-      else
-        x.raise exception, &amp;quot;execution expired&amp;quot;
-      end
-    }
-    return yield(sec)
-  ensure
-    if y
-      y.kill
-      y.join # make sure y is dead.
-    end
-  end
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;大概看到timeout是起了一个计时线程,超时时向主线程发起exception&lt;/p&gt;
-
-&lt;p&gt;猜测是因为jvm的线程模型导致exception不能向阻塞线程提交,但有待验证&lt;/p&gt;
 </description>
     </item>
     
