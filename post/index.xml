@@ -107,11 +107,16 @@ Perhaps iptables or your kernel needs to be upgraded.
 
 &lt;h5 id=&#34;toc_6&#34;&gt;4. 从原设备&lt;code&gt;eth0&lt;/code&gt;上卸下原有ip, 启用&lt;code&gt;bridge0&lt;/code&gt;&lt;/h5&gt;
 
-&lt;pre&gt;&lt;code&gt;&amp;gt; ip addr del 192.168.1.99/24 dev bridge0
+&lt;pre&gt;&lt;code&gt;&amp;gt; ip addr del 192.168.1.99/24 dev eth0
 &amp;gt; ifconfig bridge0 up
 &lt;/code&gt;&lt;/pre&gt;
 
-&lt;h5 id=&#34;toc_7&#34;&gt;5. 搞定.&lt;/h5&gt;
+&lt;h5 id=&#34;toc_7&#34;&gt;5. 启动docker&lt;/h5&gt;
+
+&lt;pre&gt;&lt;code&gt;/usr/bin/docker -d -b=bridge0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h5 id=&#34;toc_8&#34;&gt;6. 搞定.&lt;/h5&gt;
 
 &lt;p&gt;如果遇到container无法&lt;code&gt;ping&lt;/code&gt;到其他ip, 记得检查host上的gateway&lt;/p&gt;
 </description>

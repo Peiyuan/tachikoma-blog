@@ -116,16 +116,21 @@ document.write(unescape("%3Cscript src='" + _bdhmProtocol + "hm.baidu.com/h.js%3
 
 <h5 id="toc_6">4. 从原设备<code>eth0</code>上卸下原有ip, 启用<code>bridge0</code></h5>
 
-<pre><code>&gt; ip addr del 192.168.1.99/24 dev bridge0
+<pre><code>&gt; ip addr del 192.168.1.99/24 dev eth0
 &gt; ifconfig bridge0 up
 </code></pre>
 
-<h5 id="toc_7">5. 搞定.</h5>
+<h5 id="toc_7">5. 启动docker</h5>
+
+<pre><code>/usr/bin/docker -d -b=bridge0
+</code></pre>
+
+<h5 id="toc_8">6. 搞定.</h5>
 
 <p>如果遇到container无法<code>ping</code>到其他ip, 记得检查host上的gateway</p>
 
 </div>
-  <div id="disqus_thread"></div>
+  <div id="disqus_thread" style="width:98%"></div>
   <script type="text/javascript">
        
       var disqus_shortname = 'tacsay'; 
