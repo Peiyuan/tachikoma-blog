@@ -402,7 +402,7 @@ mysql-slave&gt; show status like '%open%';
 <p><strong>结论</strong>: 复制临时表时,slave上消耗的资源, <code>Innodb_num_open_files</code>会及时回收,也就是说实际消耗的系统资源被及时回收. 但<code>Slave_open_temp_tables</code>会虚高不下,按照Mysql Manual中&rdquo;Safe slave shutdown when using temporary tables&rdquo;的叙述, 用<code>Slave_open_temp_tables</code>来判断关闭server的时机时, 会出现判断失误.</p>
 
 </div>
-  <div id="disqus_thread" style="width:98%"></div>
+  <div id="disqus_thread" style="width:450px"></div>
   <script type="text/javascript">
        
       var disqus_shortname = 'tacsay'; 
