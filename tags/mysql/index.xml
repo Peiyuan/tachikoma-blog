@@ -15,12 +15,14 @@
       <pubDate>Wed, 23 Jul 2014 22:20:00 UTC</pubDate>
       
       <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-07-23-fix-mysql-group-commit</guid>
-      <description>&lt;p&gt;###翻译之前&lt;/p&gt;
+      <description>
+
+&lt;h1 id=&#34;toc_0&#34;&gt;翻译之前&lt;/h1&gt;
 
 &lt;p&gt;Kristian Nielsen写了Fixing MySQL group commit系列共四篇blog (&lt;a href=&#34;http://kristiannielsen.livejournal.com/12254.html&#34;&gt;第一篇&lt;/a&gt;, &lt;a href=&#34;http://kristiannielsen.livejournal.com/12408.html&#34;&gt;第二篇&lt;/a&gt;, &lt;a href=&#34;http://kristiannielsen.livejournal.com/12553.html&#34;&gt;第三篇&lt;/a&gt;, &lt;a href=&#34;http://kristiannielsen.livejournal.com/12810.html&#34;&gt;第四篇&lt;/a&gt;).
 读完后对group commit的理解我觉得很有帮助, 因此想翻译前三篇, 借此再整理一下自己的思路; 第四篇偏重具体实现, 故不包括&lt;/p&gt;
 
-&lt;p&gt;#第一篇&lt;/p&gt;
+&lt;h1 id=&#34;toc_1&#34;&gt;第一篇&lt;/h1&gt;
 
 &lt;p&gt;这个系列三篇文章描述了MySQL/MariaDB是如何支持group commit这个特性的. Group commit是对数据库性能一次重大的提升. 向持久存储里写数据的开销较大, group commit能减轻这种开销对数据库整体性能的影响.&lt;/p&gt;
 
@@ -31,7 +33,7 @@
 
 &lt;p&gt;蓝色和黄色的上升线是group commit开启时的TPS, 其对性能改善的程度随着并发事务数的上升而提升&lt;/p&gt;
 
-&lt;p&gt;##持久化和group commit&lt;/p&gt;
+&lt;h2 id=&#34;toc_2&#34;&gt;持久化和group commit&lt;/h2&gt;
 
 &lt;p&gt;在一个传统事务系统中, 当事务提交成功时, 我们认为事务已经被_持久化(Durable)_了. Durable就是ACID中的D, 其含义是某事务提交成功后, 即使系统在其提交成功后任意时刻崩溃(比如电源故障, 内核崩盘, 服务器软件悲剧, 还有很多很多), 系统重启且从崩溃恢复后, 该事务的状态仍是提交成功的.&lt;/p&gt;
 
@@ -46,7 +48,7 @@
 &lt;p&gt;如果每个提交都进行&lt;code&gt;fsync()&lt;/code&gt;, 受限于&lt;code&gt;fsync()&lt;/code&gt;的成本, 数据库TPS被限制在每秒150个事务(HDD).
 Group commit能改善这个状况. 我们可以用一个&lt;code&gt;fsync()&lt;/code&gt;来合并多个事务同时发生的刷盘请求. 处理多个事务的刷盘请求, 较之处理一个事务, &lt;code&gt;fsync()&lt;/code&gt;的成本差别不大, 所以如性能图表所示, 合并刷盘请求能大幅提高性能.&lt;/p&gt;
 
-&lt;p&gt;##Group commit in Mysql/MariaDB&lt;/p&gt;
+&lt;h2 id=&#34;toc_3&#34;&gt;Group commit in Mysql/MariaDB&lt;/h2&gt;
 
 &lt;p&gt;Mysql在使用InnoDB存储引擎时可以提供完整的ACID. 对于InnoDB, 开启配置&lt;code&gt;innodb_flush_log_at_trx_commit=1&lt;/code&gt;时可保证持久性. MariaDB使用XtraDB的情况与之类似.&lt;/p&gt;
 
@@ -84,7 +86,7 @@ Group commit能改善这个状况. 我们可以用一个&lt;code&gt;fsync()&lt;/
 
 &lt;p&gt;第二篇将深入探讨为什么开启binlog时group commit的代码会失效. 第三篇将讨论怎样修复这个bug.&lt;/p&gt;
 
-&lt;p&gt;#第二篇&lt;/p&gt;
+&lt;h1 id=&#34;toc_4&#34;&gt;第二篇&lt;/h1&gt;
 
 &lt;p&gt;InnoDB/XtraDB是支持group commit的. group commit在&lt;code&gt;innobase_commit()&lt;/code&gt;函数中分为两部分完成: 第一部分称为&amp;rdquo;快&amp;rdquo;部分, 是在内存中准备要提交的信息&lt;/p&gt;
 
@@ -125,7 +127,7 @@ innobase_commit()
 
 &lt;p&gt;第二篇的结论是: 如果抛弃了&lt;code&gt;prepare_commit_mutex&lt;/code&gt;, MySQL可以迎来有group commit的美好时代. 第三篇将更深入进行讨论.&lt;/p&gt;
 
-&lt;p&gt;#第三篇&lt;/p&gt;
+&lt;h1 id=&#34;toc_5&#34;&gt;第三篇&lt;/h1&gt;
 
 &lt;p&gt;这一篇将讨论如何修复group commit的问题. 如第二篇所述, 我们可以去掉&lt;code&gt;prepare_commit_mutex&lt;/code&gt;, 然后再为binlog加上独立的group commit功能, 这个问题就可以解决.&lt;/p&gt;
 
