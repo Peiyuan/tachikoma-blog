@@ -118,7 +118,7 @@ Perhaps iptables or your kernel needs to be upgraded.
 
 &lt;h5 id=&#34;toc_8&#34;&gt;6. 搞定.&lt;/h5&gt;
 
-&lt;p&gt;如果遇到container无法&lt;code&gt;ping&lt;/code&gt;到其他ip, 记得检查host上的gateway&lt;/p&gt;
+&lt;p&gt;如果遇到container无法&lt;code&gt;ping&lt;/code&gt;到其他ip, 记得检查host上的gateway, 以及host上的防火墙&lt;/p&gt;
 </description>
     </item>
     

@@ -7,7 +7,150 @@
     <language>zh-cn</language>
     
     
-    <updated>Thu, 10 Jul 2014 22:53:00 UTC</updated>
+    <updated>Wed, 23 Jul 2014 22:20:00 UTC</updated>
+    
+    <item>
+      <title>[翻译] Fixing MySQL group commit</title>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-07-23-fix-mysql-group-commit</link>
+      <pubDate>Wed, 23 Jul 2014 22:20:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-07-23-fix-mysql-group-commit</guid>
+      <description>&lt;p&gt;###翻译之前&lt;/p&gt;
+
+&lt;p&gt;Kristian Nielsen写了Fixing MySQL group commit系列共四篇blog (&lt;a href=&#34;http://kristiannielsen.livejournal.com/12254.html&#34;&gt;第一篇&lt;/a&gt;, &lt;a href=&#34;http://kristiannielsen.livejournal.com/12408.html&#34;&gt;第二篇&lt;/a&gt;, &lt;a href=&#34;http://kristiannielsen.livejournal.com/12553.html&#34;&gt;第三篇&lt;/a&gt;, &lt;a href=&#34;http://kristiannielsen.livejournal.com/12810.html&#34;&gt;第四篇&lt;/a&gt;).
+读完后对group commit的理解我觉得很有帮助, 因此想翻译前三篇, 借此再整理一下自己的思路; 第四篇偏重具体实现, 故不包括&lt;/p&gt;
+
+&lt;p&gt;#第一篇&lt;/p&gt;
+
+&lt;p&gt;这个系列三篇文章描述了MySQL/MariaDB是如何支持group commit这个特性的. Group commit是对数据库性能一次重大的提升. 向持久存储里写数据的开销较大, group commit能减轻这种开销对数据库整体性能的影响.&lt;/p&gt;
+
+&lt;p&gt;如下图所示, group commit对性能有很大提升:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://knielsen-hq.org/maria/fix-group-commit-1.png&#34; alt=&#34;引用原文图&#34; title=&#34;引用原文图&#34; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;蓝色和黄色的上升线是group commit开启时的TPS, 其对性能改善的程度随着并发事务数的上升而提升&lt;/p&gt;
+
+&lt;p&gt;##持久化和group commit&lt;/p&gt;
+
+&lt;p&gt;在一个传统事务系统中, 当事务提交成功时, 我们认为事务已经被_持久化(Durable)_了. Durable就是ACID中的D, 其含义是某事务提交成功后, 即使系统在其提交成功后任意时刻崩溃(比如电源故障, 内核崩盘, 服务器软件悲剧, 还有很多很多), 系统重启且从崩溃恢复后, 该事务的状态仍是提交成功的.&lt;/p&gt;
+
+&lt;p&gt;确保持久化的通常手段是:提交时, 将足够的信息写入事务日志文件(transactional log file),然后用&lt;code&gt;fsync()&lt;/code&gt;将数据强制刷到磁盘上, 最后提交操作才成功返回.&lt;/p&gt;
+
+&lt;p&gt;凭借这些信息数据库在崩溃重启后能进行完整恢复. 当然除了&lt;code&gt;fsync&lt;/code&gt;, 刷盘也可以通过&lt;code&gt;fdatasync()&lt;/code&gt;系统调用或者打开日志文件时用&lt;code&gt;O_DIRECT&lt;/code&gt;选项, 为了简便, 我们用&lt;code&gt;fsync()&lt;/code&gt;来代指刷盘操作.&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;fsync()&lt;/code&gt;是个昂贵的操作. 传统硬盘(HDD)每秒可以进行150次&lt;code&gt;fsync()&lt;/code&gt;, 而固态硬盘(比如Intel X25-M)每秒可进行1200次. 如果使用带电cache的RAID控制器, 可以减少&lt;code&gt;fsync()&lt;/code&gt;带来的性能影响, 但不能完全消除 ([译注]我也不太理解这句&amp;hellip;).&lt;/p&gt;
+
+&lt;p&gt;(除了&lt;code&gt;fsync()&lt;/code&gt;, 也有其他的手段可以实现持久化. 比如在同步复制的集群(NDB,Galera)里, 假设全部节点不会同时故障, 那事务同步复制到多个节点, 就可以认为事务是持久化的. 不过不论用什么持久化方法, 较之只提交到本地内存, 持久化的代价要昂贵很多)&lt;/p&gt;
+
+&lt;p&gt;如果每个提交都进行&lt;code&gt;fsync()&lt;/code&gt;, 受限于&lt;code&gt;fsync()&lt;/code&gt;的成本, 数据库TPS被限制在每秒150个事务(HDD).
+Group commit能改善这个状况. 我们可以用一个&lt;code&gt;fsync()&lt;/code&gt;来合并多个事务同时发生的刷盘请求. 处理多个事务的刷盘请求, 较之处理一个事务, &lt;code&gt;fsync()&lt;/code&gt;的成本差别不大, 所以如性能图表所示, 合并刷盘请求能大幅提高性能.&lt;/p&gt;
+
+&lt;p&gt;##Group commit in Mysql/MariaDB&lt;/p&gt;
+
+&lt;p&gt;Mysql在使用InnoDB存储引擎时可以提供完整的ACID. 对于InnoDB, 开启配置&lt;code&gt;innodb_flush_log_at_trx_commit=1&lt;/code&gt;时可保证持久性. MariaDB使用XtraDB的情况与之类似.&lt;/p&gt;
+
+&lt;p&gt;使用持久化的原因, 一方面是已经提交的事务可以不受系统崩溃的影响, 另一方面, 是可以将数据库作为replication(数据复制)的master(复制源)&lt;/p&gt;
+
+&lt;p&gt;数据复制使用binlog作为手段时, 保证binlog中的数据内容和存储引擎中的数据内容完全一致就很重要. 如果无法保证两者一致, slave(复制目标)将得到和master不一致的数据, 会产生无法估计的影响, 比如在master上进行的SQL无法在slave上成功执行.
+如果不保证持久化, 在系统崩溃时很多数据将丢失, 如果存储引擎中丢失的数据和binlog中丢失的数据不一样多, 那最终两者数据将不一致.
+所以, 当使用binlog时, 保证持久化是MySQL/MariaDB能从崩溃正确恢复并达成最终数据一致性的前提.&lt;/p&gt;
+
+&lt;p&gt;MySQL/MariaDB通过XA/(binlog和存储引擎的)二段提交来保证持久化. 提交一个事务有三个步骤:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;准备阶段, 事务在存储引擎上进行持久化 ([译注] 指的可能是innoDB的undo log). 这个阶段完成后, 该事务仍可以被回滚. 如之后发生崩溃, 该事务可以被恢复.&lt;/li&gt;
+&lt;li&gt;准备阶段成功后, 事务在binlog上进行持久化.&lt;/li&gt;
+&lt;li&gt;最后, 提交阶段, 存储引擎将事务真正提交. 完成这步后, 事务将不可被回滚.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;当系统崩溃并重启后, 恢复过程将扫描binlog. binlog中准备阶段成功但没有提交的事务将进入提交阶段. 其他准备阶段成功的事务([译注] 不在binlog中的事务)将会被回滚. 以此来保证存储引擎和binlog间的数据一致性.&lt;/p&gt;
+
+&lt;p&gt;以上三个步骤中, 每一步骤都需要进行&lt;code&gt;fsync()&lt;/code&gt;, 相比禁用binlog时一个commit只需调用一次&lt;code&gt;fsync()&lt;/code&gt;, 这种方式比较昂贵, 使得group commit优化更为重要.&lt;/p&gt;
+
+&lt;p&gt;不幸的是当启用binlog时, group commit在MySQL/MariaDB上不能工作! Peter Zaissev在2005年就报了这个著名的&lt;a href=&#34;http://bugs.mysql.com/bug.php?id=13669&#34;&gt;Bug#13669&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;如在开篇的图表和性能测试中所示, 我们在一个数据库服务器上跑了很多小事务(在小XtraDB表上使用REPLACE语句), 对比了启用和禁用binlog的情况. 这种性能测试的瓶颈在于持久化时&lt;code&gt;fsync()&lt;/code&gt;操作的吞吐量.&lt;/p&gt;
+
+&lt;p&gt;我们用了两种不同的服务器来进行性能测试,一种有两块Western Digital 10k rpm HDD存储(binlog和XtraDB log写在不同的存储上); 另一种有一块Intel X25-M SSD存储. 两种服务器都运行MariaDB 5.1.44, 都开启了持久化提交, 也都关闭了存储缓存(否则测试结果将出现偏差).&lt;/p&gt;
+
+&lt;p&gt;测试图表表明了不同数量的并发线程下的TPS. 对于每种服务器, 有一条线对应禁用binlog的情况, 另一条线对应开启binlog的情况.&lt;/p&gt;
+
+&lt;p&gt;我们看到: 在1个运行线程时, 开启binlog会有一定性能消耗, 原因如我们所料, 是因为一次提交需要调用三次&lt;code&gt;fsync()&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;更糟糕的是, 在开启binlog时group commit并不工作. 随着并发度的增加,  禁用binlog的曲线展现了良好的线性增长的性能, 但开启binlog时的性能曲线则死水一滩. 随着Group commit失效, 高并发时开启binlog的成本高的可怕(HDD存储, 64个并发线程时, 开启binlog将带来两个数量级(大于100倍)的性能损失)&lt;/p&gt;
+
+&lt;p&gt;第一篇的结论是: 如果我们能在开启binlog时进行group commit优化, 从而解决&lt;code&gt;fsync()&lt;/code&gt;带来的性能瓶颈, 那么将获得巨大的性能提升.&lt;/p&gt;
+
+&lt;p&gt;第二篇将深入探讨为什么开启binlog时group commit的代码会失效. 第三篇将讨论怎样修复这个bug.&lt;/p&gt;
+
+&lt;p&gt;#第二篇&lt;/p&gt;
+
+&lt;p&gt;InnoDB/XtraDB是支持group commit的. group commit在&lt;code&gt;innobase_commit()&lt;/code&gt;函数中分为两部分完成: 第一部分称为&amp;rdquo;快&amp;rdquo;部分, 是在内存中准备要提交的信息&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;trx-&amp;gt;flush_log_later = TRUE;
+innobase_commit_low(trx);
+trx-&amp;gt;flush_log_later = FALSE;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;第二部分称为&amp;rdquo;慢&amp;rdquo;部分, 其调用&lt;code&gt;fsync()&lt;/code&gt;将提交信息刷磁盘.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;trx_commit_complete_for_mysql(trx)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;当一个事务提交正在执行&amp;rdquo;慢&amp;rdquo;部分时, 之后提交的事务可以同时完成其&amp;rdquo;快&amp;rdquo;部分, 然后进入队列等待正在进行的&lt;code&gt;fsync()&lt;/code&gt;完成. 一旦正在进行的&lt;code&gt;fsync()&lt;/code&gt;完成, 一个新的&lt;code&gt;fsync()&lt;/code&gt;可以将队列中等待的所有事务一次刷往磁盘. 当禁用binlog时group commit就是这样工作的.&lt;/p&gt;
+
+&lt;p&gt;当开启binlog时, Mysql用XA/二段提交来保证binlog和存储引擎间的数据一致性. 那一次commit就分为以下三个步骤:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;innobase_xa_prepare()
+write() and fsync() binary log
+innobase_commit()
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;需要注意的是是InnoDB在&lt;code&gt;innobase_xa_prepare()&lt;/code&gt;锁住了&lt;code&gt;prepare_commit_mutex&lt;/code&gt;, 一直到&lt;code&gt;innobase_commit()&lt;/code&gt;中的&amp;rdquo;快&amp;rdquo;部分结束才释放这个锁. 这意味着当一个事务正在执行&lt;code&gt;innobase_commit()&lt;/code&gt;时, 之后提交的事务都被阻塞在&lt;code&gt;innobase_xa_prepare()&lt;/code&gt;中等待锁释放. 结果是没有事务会在队列中等待&lt;code&gt;fsync()&lt;/code&gt;, group commit因此失效.&lt;/p&gt;
+
+&lt;p&gt;那现在的问题是开启binlog时为什么InnoDB要锁住&lt;code&gt;prepare_commit_mutex&lt;/code&gt;? 这是个非常优秀的问题, 在开展一系列调查后, 好像根本没有强有力的理由来支持这个锁的存在.&lt;/p&gt;
+
+&lt;p&gt;无论是InnoDB代码注释, 还是bug追踪系统, 或是其它资料, 提及这个锁时都说它是用来确保在存储引擎和binlog中的提交顺序一致. 确实, 如果没有这把锁, 两个事务在存储引擎中的提交顺序是AB, 而在binlog中的顺序可能是BA.&lt;/p&gt;
+
+&lt;p&gt;那么下一个问题是: 为什么要保证存储引擎和binlog的提交顺序一致? 目力所及的唯一原因是InnoDB热备和XtraBackup需要保证备份中的数据文件和备份中记录的binlog位置一致.&lt;/p&gt;
+
+&lt;p&gt;Sergei Golubchik在2010 MySQL conference期间对此做了一些研究. 结论是XtraDB在获取binlog位置之前会加全局锁&lt;code&gt;FLUSH TABLE WITH READ LOCK&lt;/code&gt;, 这个锁完全阻塞所有commit, 此时可以保证数据文件和binlog位置是一致的. (InnoDB热备工具是非开源的, 但也应是相同的工作机理). 所以对于备份是不需要用&lt;code&gt;prepare_commit_mutex&lt;/code&gt;保证(非备份时)数据文件和binlog位置对齐的.&lt;/p&gt;
+
+&lt;p&gt;另一种热备方法是LVM快照. LVM快照恢复后启动Mysql服务器, 会进入数据库恢复流程, 来确保数据文件和binlog的数据一致, 也不需要&lt;code&gt;prepare_commit_mutex&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;所以我们并不能为&lt;code&gt;prepare_commit_mutex&lt;/code&gt;的存在找到合适的理由. (然后作者在此进行了吐槽, 大意是&amp;rdquo;你们这些猪头怎么为了这么个荒谬的理由阻碍了group commit的发展?!&amp;ldquo;)&lt;/p&gt;
+
+&lt;p&gt;(为了实现完全的group commit, MySQL还需要做另一个修改, 就是将binlog也实现group commit)&lt;/p&gt;
+
+&lt;p&gt;第二篇的结论是: 如果抛弃了&lt;code&gt;prepare_commit_mutex&lt;/code&gt;, MySQL可以迎来有group commit的美好时代. 第三篇将更深入进行讨论.&lt;/p&gt;
+
+&lt;p&gt;#第三篇&lt;/p&gt;
+
+&lt;p&gt;这一篇将讨论如何修复group commit的问题. 如第二篇所述, 我们可以去掉&lt;code&gt;prepare_commit_mutex&lt;/code&gt;, 然后再为binlog加上独立的group commit功能, 这个问题就可以解决.&lt;/p&gt;
+
+&lt;p&gt;然而, 我们能做的更好. 第一篇中提到, 开启binlog是我们需要XA来保证系统崩溃并恢复后存储引擎和binlog的数据最终一致性, 这种情况下1个提交需要进行3次&lt;code&gt;fsync()&lt;/code&gt;刷盘. 尽管用我们修复的group commit可以抵消一部分&lt;code&gt;fsync()&lt;/code&gt;开销, 但开销仍然很客观. 在&lt;a href=&#34;https://launchpad.net/~maria-developers&#34;&gt;maria-developers邮件列表&lt;/a&gt;中的一个&lt;a href=&#34;https://lists.launchpad.net/maria-developers/msg01998.html&#34;&gt;讨论&lt;/a&gt;中, 提到一种方法可以让3次&lt;code&gt;fsync()&lt;/code&gt;刷盘降为仅1次&lt;/p&gt;
+
+&lt;p&gt;这个方法就是仅在为binlog刷盘时进行&lt;code&gt;fsync()&lt;/code&gt;, 也就是让&lt;code&gt;innodb_flush_log_at_trx_commit&lt;/code&gt;运行在级别2甚至级别0上.&lt;/p&gt;
+
+&lt;p&gt;为了描述这种方法, 假设某个事务A已经写入binlog文件, &lt;code&gt;fsync()&lt;/code&gt;保证binlog文件已经刷盘. 然后事务A被提交给存储引擎, 在存储引擎将事务A刷盘前系统崩溃.&lt;/p&gt;
+
+&lt;p&gt;系统恢复后进入数据库恢复流程, 此时事务A存在于binlog中, 但不存在于存储引擎中, 产生数据不一致. 这个不一致可以通过重放binlog中的事务A来解决. 重放binlog就像在复制的slave端所做的一样. 重放成功后, 就可以恢复成一致状态.&lt;/p&gt;
+
+&lt;p&gt;为了能按上述步骤恢复到数据一致状态, 我们需要以下两个条件:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;对于一个事务, 需要将其在binlog中的位置存到存储引擎中, 这样在崩溃恢复中, 我们才能知道应从binlog哪个位置起开始回放事务.&lt;/li&gt;
+&lt;li&gt;这次我们真的需要保证binlog和存储引擎的commit顺序一致! 否则崩溃恢复时, 有可能的情况是: binlog中两个事务的顺序是AB, 而存储引擎中仅有B被提交, 而A没被持久化到存储引擎中. 这样我们就没法决定如何恢复一致性了.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;为了确保binlog和存储引擎的提交顺序一致, 我们不能再回到&lt;code&gt;prepare_commit_mutex&lt;/code&gt;的方案了, 否则开启binlog时group commit又会失去作用. 我们将用另外的方法来确保顺序. Mark Callaghan在MySQL conference上提到了这样的方法, 可以参看&lt;a href=&#34;http://www.facebook.com/note.php?note_id=386328905932&#34;&gt;这里&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;基本方案就是当事务被写进binlog时, 我们记住其顺序. 我们可以将事务放到一个队列里, 或者为每个事务分配单调递增的全局序号, 或者如Mark所述为每个事务分配某种ticket. 那么在&lt;code&gt;innobase_commit()&lt;/code&gt;中事务可以通过上述某种方法来保持顺序.&lt;/p&gt;
+
+&lt;p&gt;[译注: 理论部分到此结束. 这之后都是作者在简单叙述其解决方案, 之后就不译了. 出门左转见&lt;a href=&#34;http://kristiannielsen.livejournal.com/12553.html&#34;&gt;原文&lt;/a&gt;]&lt;/p&gt;
+</description>
+    </item>
     
     <item>
       <title>初次使用Docker碰到的一些问题</title>
@@ -118,7 +261,7 @@ Perhaps iptables or your kernel needs to be upgraded.
 
 &lt;h5 id=&#34;toc_8&#34;&gt;6. 搞定.&lt;/h5&gt;
 
-&lt;p&gt;如果遇到container无法&lt;code&gt;ping&lt;/code&gt;到其他ip, 记得检查host上的gateway&lt;/p&gt;
+&lt;p&gt;如果遇到container无法&lt;code&gt;ping&lt;/code&gt;到其他ip, 记得检查host上的gateway, 以及host上的防火墙&lt;/p&gt;
 </description>
     </item>
     
@@ -2264,190 +2407,6 @@ signal.Notify(c, syscall.SIGTTIN)
 &lt;p&gt;已经报了&lt;a href=&#34;https://code.google.com/p/go/issues/detail?id=7378&amp;amp;thanks=7378&amp;amp;ts=1392967848&#34;&gt;bug&lt;/a&gt;&lt;/p&gt;
 
 &lt;p&gt;但想不出好的GO代码的修改方案&lt;/p&gt;
-</description>
-    </item>
-    
-    <item>
-      <title>尝试使用mysql plugin将RESET SLAVE后的节点重新恢复成slave</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-02-11-try-rollback-master-back-to-slave-by-mysql-plugin</link>
-      <pubDate>Tue, 11 Feb 2014 22:31:00 UTC</pubDate>
-      
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-02-11-try-rollback-master-back-to-slave-by-mysql-plugin</guid>
-      <description>
-
-&lt;p&gt;这几天在尝试为以下场景制作一个mysql plugin, 但是是一个失败的尝试, 在此记录&lt;/p&gt;
-
-&lt;h2 id=&#34;toc_0&#34;&gt;场景&lt;/h2&gt;
-
-&lt;pre&gt;&lt;code&gt;一对mysql主从节点 M-S, 节点S执行了RESET SLAVE
-后来后悔了
-在没有数据通过非replication的渠道写入S的条件下, 想让S和M重新恢复成一对主从
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;关键点是S能将&lt;code&gt;RESET SLAVE&lt;/code&gt;时S的&lt;code&gt;Exec_Master_Log_Pos&lt;/code&gt;和&lt;code&gt;S binlog pos&lt;/code&gt;记录下来&lt;/p&gt;
-
-&lt;p&gt;尝试了以下几种方案:&lt;/p&gt;
-
-&lt;h2 id=&#34;toc_1&#34;&gt;调用者在&lt;code&gt;RESET SLAVE&lt;/code&gt;时手工记录, 不需要制作插件&lt;/h2&gt;
-
-&lt;h2 id=&#34;toc_2&#34;&gt;Audit plugin.&lt;/h2&gt;
-
-&lt;p&gt;Mysql的Audit plugin可以审计大部分mysqld经手的SQL, 包括&lt;code&gt;RESET SLAVE&lt;/code&gt;.&lt;/p&gt;
-
-&lt;p&gt;但Audit plugin是在每个SQL之后才会调用. 在&lt;code&gt;RESET SLAVE&lt;/code&gt;时S上master_info会被清理, 即&lt;code&gt;Exec_Master_Log_Pos&lt;/code&gt;的信息在调用Audit plugin已经丢失&lt;/p&gt;
-
-&lt;h2 id=&#34;toc_3&#34;&gt;Replication plugin (&lt;code&gt;after_reset_slave&lt;/code&gt;)&lt;/h2&gt;
-
-&lt;p&gt;Replication plugin (参看mysql semisync的源码), 在slave端提供了&lt;code&gt;Binlog_relay_IO_observer&lt;/code&gt;, 贴个Mysql源码方便理解&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;/**
-    Observes and extends the service of slave IO thread.
- */
- typedef struct Binlog_relay_IO_observer {
-   uint32 len;
-
-   /**
-      This callback is called when slave IO thread starts
-
-      @param param Observer common parameter
-
-      @retval 0 Sucess
-      @retval 1 Failure
-   */
-   int (*thread_start)(Binlog_relay_IO_param *param);
-
-   /**
-      This callback is called when slave IO thread stops
-
-      @param param Observer common parameter
-
-      @retval 0 Sucess
-      @retval 1 Failure
-   */
-   int (*thread_stop)(Binlog_relay_IO_param *param);
-
-   /**
-      This callback is called before slave requesting binlog transmission from master
-
-      This is called before slave issuing BINLOG_DUMP command to master
-      to request binlog.
-
-      @param param Observer common parameter
-      @param flags binlog dump flags
-
-      @retval 0 Sucess
-      @retval 1 Failure
-   */
-   int (*before_request_transmit)(Binlog_relay_IO_param *param, uint32 flags);
-
-   /**
-      This callback is called after read an event packet from master
-
-      @param param Observer common parameter
-      @param packet The event packet read from master
-      @param len Length of the event packet read from master
-      @param event_buf The event packet return after process
-      @param event_len The length of event packet return after process
-
-      @retval 0 Sucess
-      @retval 1 Failure
-   */
-   int (*after_read_event)(Binlog_relay_IO_param *param,
-                           const char *packet, unsigned long len,
-                           const char **event_buf, unsigned long *event_len);
-
-   /**
-      This callback is called after written an event packet to relay log
-
-      @param param Observer common parameter
-      @param event_buf Event packet written to relay log
-      @param event_len Length of the event packet written to relay log
-      @param flags flags for relay log
-
-      @retval 0 Sucess
-      @retval 1 Failure
-   */
-   int (*after_queue_event)(Binlog_relay_IO_param *param,
-                            const char *event_buf, unsigned long event_len,
-                            uint32 flags);
-
-   /**
-      This callback is called after reset slave relay log IO status
-
-      @param param Observer common parameter
-
-      @retval 0 Sucess
-      @retval 1 Failure
-   */
-   int (*after_reset_slave)(Binlog_relay_IO_param *param);
- } Binlog_relay_IO_observer;
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;首先尝试用&lt;code&gt;after_reset_slave&lt;/code&gt;, 从函数名字就可以看到会遇到和Audit Plugin相同的问题: 即&lt;code&gt;Exec_Master_Log_Pos&lt;/code&gt;的信息在调用时已经丢失&lt;/p&gt;
-
-&lt;h2 id=&#34;toc_4&#34;&gt;Replication plugin (&lt;code&gt;after_reset_slave&lt;/code&gt;再尝试, &lt;code&gt;future_group_master_log_pos&lt;/code&gt;)&lt;/h2&gt;
-
-&lt;p&gt;还不死心, &lt;code&gt;Exec_Master_Log_Pos&lt;/code&gt;的数据结构是&lt;code&gt;Relay_log_info.group_master_log_pos&lt;/code&gt;, 尽管这个信息在&lt;code&gt;after_reset_slave&lt;/code&gt;时已经丢失, 但发现&lt;code&gt;Relay_log_info.future_group_master_log_pos&lt;/code&gt;可能是个方向&lt;/p&gt;
-
-&lt;p&gt;先解释&lt;code&gt;Relay_log_info.future_group_master_log_pos&lt;/code&gt;, 可以参看&lt;code&gt;log_event.cc&lt;/code&gt;的这段注释&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;  /*
-    InnoDB internally stores the master log position it has executed so far,
-    i.e. the position just after the COMMIT event.
-    When InnoDB will want to store, the positions in rli won&#39;t have
-    been updated yet, so group_master_log_* will point to old BEGIN
-    and event_master_log* will point to the beginning of current COMMIT.
-    But log_pos of the COMMIT Query event is what we want, i.e. the pos of the
-    END of the current log event (COMMIT). We save it in rli so that InnoDB can
-    access it.
-  */
-  const_cast&amp;lt;Relay_log_info*&amp;gt;(rli)-&amp;gt;future_group_master_log_pos= log_pos;
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;&lt;code&gt;future_group_master_log_pos&lt;/code&gt;指向了execute的最后一个transaction的COMMIT event之前, 即&lt;code&gt;future_group_master_log_pos&lt;/code&gt; 大部分时间等于 &lt;code&gt;group_master_log_pos - 27&lt;/code&gt; (27是COMMIT event的长度)&lt;/p&gt;
-
-&lt;p&gt;但仍有例外情况: 如果M执行了&lt;code&gt;FLUSH LOGS&lt;/code&gt;, 将log从0001递增到了0002, 此时S上的&lt;code&gt;future_group_master_log_pos&lt;/code&gt;会指向0001的最后一个transaction的COMMIT event之前. 但S上的&lt;code&gt;group_master_log_name&lt;/code&gt;已经到了0002, 与&lt;code&gt;future_group_master_log_pos&lt;/code&gt;不匹配, 会引起异常&lt;/p&gt;
-
-&lt;p&gt;(其实此时S上的&lt;code&gt;group_master_log_name&lt;/code&gt;也已经置空了, 但可以从内存残片中恢复出文件名)&lt;/p&gt;
-
-&lt;p&gt;设想如果对于log_name也有&lt;code&gt;future_group_master_log_name&lt;/code&gt;, 那么S可以直接&lt;code&gt;change master&lt;/code&gt;到M的&lt;code&gt;future_group_master_log_name&lt;/code&gt;和&lt;code&gt;future_group_master_log_pos&lt;/code&gt;位置, 可以恢复起M-S主从结构&lt;/p&gt;
-
-&lt;h2 id=&#34;toc_5&#34;&gt;Replication plugin (&lt;code&gt;thread_stop&lt;/code&gt;)&lt;/h2&gt;
-
-&lt;p&gt;Replication plugin的&lt;code&gt;thread_stop&lt;/code&gt;是指Slave IO thread停止时调用, 此时可以拿到&lt;code&gt;Exec_Master_Log_Pos&lt;/code&gt;和&lt;code&gt;S binlog pos&lt;/code&gt;, 但拿到的&lt;code&gt;S binlog pos&lt;/code&gt;没有意义, 因为不能保证Slave SQL thread也停下来了&lt;/p&gt;
-
-&lt;h2 id=&#34;toc_6&#34;&gt;Storage Engine plugin&lt;/h2&gt;
-
-&lt;p&gt;这是我最后一根救命稻草, 阅读Mysql源码时注意到以下片段(做了缩减)&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;int reset_slave(THD *thd, Master_info* mi)
-{
-    ...
-    ha_reset_slave(thd);
-    ... //clean memory data
-}
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;&lt;code&gt;reset_slave&lt;/code&gt;在清理内存数据前通知了storage engine插件, 这个插件可以获得所有必要信息&lt;/p&gt;
-
-&lt;p&gt;但存在一个问题, 即&lt;code&gt;ha_reset_slave&lt;/code&gt;仅在Mysql NDB版本中存在, 不具备通用性, 参看宏定义(做了缩减)&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;#ifdef HAVE_NDB_BINLOG
-...
-void ha_reset_slave(THD *thd);
-...
-#else
-...
-#define ha_reset_slave(a) do {} while (0)
-...
-#endif
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;h2 id=&#34;toc_7&#34;&gt;吐槽和总结&lt;/h2&gt;
-
-&lt;p&gt;可以看到Mysql plugin不&lt;strong&gt;太&lt;/strong&gt;预留接口, 是仅仅为已知应用场景提供必要接口, 比如&lt;code&gt;Binlog_relay_IO_observer&lt;/code&gt;中有&lt;code&gt;after&lt;/code&gt;不一定有&lt;code&gt;before&lt;/code&gt;. 比较容易控制插件质量, 但插件能做到的非常局限.&lt;/p&gt;
-
-&lt;p&gt;以上各种尝试, 归根到底, 只要修改Mysql的一点源码编译一下就可以达到很好的效果, 不需要用插件的方式在Mysql中到处找功能插槽, 但通用性变差.&lt;/p&gt;
 </description>
     </item>
     
