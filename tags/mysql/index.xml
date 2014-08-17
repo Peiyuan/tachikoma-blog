@@ -7,7 +7,50 @@
     <language>zh-cn</language>
     
     
-    <updated>Wed, 23 Jul 2014 22:20:00 UTC</updated>
+    <updated>Sun, 17 Aug 2014 19:13:00 UTC</updated>
+    
+    <item>
+      <title>测试Mysql 5.5的crash safe</title>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-08-17-mysql-55-crash-safe</link>
+      <pubDate>Sun, 17 Aug 2014 19:13:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-08-17-mysql-55-crash-safe</guid>
+      <description>&lt;p&gt;事情的起因有点意思, 前几天QA在参照&lt;a href=&#34;http://bugs.mysql.com/bug.php?id=69444&#34;&gt;文档&lt;/a&gt;测试Mysql 5.6的crash safe特性. QA读到了源码里面的一段:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;  if ((error= w-&amp;gt;commit_positions(this, ptr_group,
+                                  w-&amp;gt;c_rli-&amp;gt;is_transactional())))
+    goto err;
+
+...
+
+  DBUG_EXECUTE_IF(&amp;quot;crash_after_update_pos_before_apply&amp;quot;,
+                  sql_print_information(&amp;quot;Crashing crash_after_update_pos_before_apply.&amp;quot;);
+                  DBUG_SUICIDE(););
+
+  error= do_commit(thd);
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;并用&lt;code&gt;crash_after_update_pos_before_apply&lt;/code&gt;选项成功复现了bug.&lt;/p&gt;
+
+&lt;p&gt;后来QA问我Mysql 5.5怎么测试crash safe, 因为她注意到Mysql 5.5的代码里并没有类似的测试插桩.&lt;/p&gt;
+
+&lt;p&gt;读过Mysql 5.5的源码后, 找到了下面的位置&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;int apply_event_and_update_pos(Log_event* ev, THD* thd, Relay_log_info* rli) {
+    if (reason == Log_event::EVENT_SKIP_NOT)
+    exec_res= ev-&amp;gt;apply_event(rli);
+    ...
+    //插入代码的位置
+    if (exec_res == 0) {
+        int error= ev-&amp;gt;update_pos(rli);
+        ...
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在标记的位置插入代码&lt;code&gt;DBUG_EXECUTE_IF(&amp;quot;crash_after_apply_log_and_before_update_pos&amp;quot;, DBUG_SUICIDE(););&lt;/code&gt;, 重新编译Mysql就可以用&lt;code&gt;crash_after_apply_log_and_before_update_pos&lt;/code&gt;作为debug选项了.&lt;/p&gt;
+</description>
+    </item>
     
     <item>
       <title>[翻译] Fixing MySQL group commit</title>
@@ -2630,109 +2673,6 @@ SELECT UNIX_TIMESTAMP() (rpl_slave.cc:get_master_version_and_clock)&lt;/li&gt;
 &lt;p&gt;可以看到slave获得master的时间方法就是直接下sql，完全忽略网络延迟等等等等，属于不精准的时间&lt;/p&gt;
 
 &lt;p&gt;&lt;a href=&#34;http://guduwhuzhe.iteye.com/blog/1901707&#34;&gt;这篇文章&lt;/a&gt;从源码级别分析了Seconds_Behind_Master的来源，也给出了备库延迟跳跃的原因。总的来说就是Seconds_Behind_Master不可信。&lt;/p&gt;
-</description>
-    </item>
-    
-    <item>
-      <title>Mysql rpl_master.cc:mysql_binlog_send 源码的一些个人分析和吐槽</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-10-16-mysql-mysql_binlog_send-src</link>
-      <pubDate>Wed, 16 Oct 2013 22:50:00 UTC</pubDate>
-      
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-10-16-mysql-mysql_binlog_send-src</guid>
-      <description>
-
-&lt;p&gt;读了两天rpl_master.cc:mysql_binlog_send的源码（Mysql 5.6.11），总结一下&lt;/p&gt;
-
-&lt;p&gt;函数的入口是rpl_master.cc:com_binlog_dump，当slave向master请求数据时，在master上调用&lt;/p&gt;
-
-&lt;p&gt;函数参数说明: &lt;br/&gt;log_ident为slave请求的binlog文件名，如&amp;rdquo;mysql-bin.000001&amp;rdquo;&lt;br/&gt;pos为slave请求的binlog位置&lt;br/&gt;slave_gtid_executed为gtid相关，在此忽略&lt;/p&gt;
-
-&lt;p&gt;在此吐槽：&lt;/p&gt;
-
-&lt;ol&gt;
-&lt;li&gt;这个函数将近1k行，且缩进混乱，代码折叠困难。最后附的我的笔记中，有整理好的源码下载&lt;/li&gt;
-&lt;li&gt;这个函数有两大段近百行的重复代码（1179 &amp;amp; 1553）&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;h2 id=&#34;toc_0&#34;&gt;源码的主体结构&lt;/h2&gt;
-
-&lt;pre&gt;&lt;code&gt;mysql_binlog_send(…)
-{
-     0814 … bla bla
-     1011 fake_rotate_event
-     1028 max_alloed_packet= MAX_MAX_ALLOWED_PACKET
-     1038 if (请求的POS不是从binlog开头开始)
-     1039 {
-               从binlog开头中找到一个FD event(FORMAT_DESCRIPTION_EVENT), 并发送给slave
-     1123 }
-     1124 else
-     1125 {
-               FD event可以从正常的replication中传送给slave，此处不做操作
-     1127 }
-     1132 while (net和the都在运转)
-     1133 {
-     1143      while (从binlog中读取一个event)
-     1144      {
-     1178           switch (event_type)
-     1179           {
-                         分类型处理event
-     1281           }
-     1283           若event需跳转到下一个binlog(goto_next_binlog), break
-     1291           fire HOOK before_send_event
-     1300           记录skip_group
-     1306           {
-                         send last skip group heartbeat?
-     1326           }
-     1331           向slave发送event
-     1348           {
-                         处理LOAD_EVENT
-     1356           }
-     1358           fire HOOK after_send_event
-     1369      }
-     1391      if (!goto_next_binlog)
-     1392      {
-                   发送完所有binlog，未发生binlog切换时
-     1437          加锁尝试再读取一个event（此时其他进程不能更新binlog），目的是试探之前处理过程中master上是否有更多的binlog写入，若有，则跳转1553处理read_packet
-     1451          若没有更多的binlog 
-                   {
-                        等待更多的binlog写入，等待时发送心跳
-     1545          }
-     1553          处理read_packet
-                   {                         
-                        分类型处理event
-     1682          }
-     1683      }
-     1685      if (goto_next_binlog)
-               {
-                    切换到下一个binlog
-               }
-     1733 }
-     1735 之后是收尾处理
-}
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;h2 id=&#34;toc_1&#34;&gt;重点步骤&lt;/h2&gt;
-
-&lt;ol&gt;
-&lt;li&gt;补发Format Description event。&lt;br/&gt;如果传送从binlog开头开始，那么FD event会正常随着binlog传送；&lt;br/&gt;若传送不从binlog开头开始，则需要补发一个FD event，才开始传送&lt;/li&gt;
-&lt;li&gt;如何判断binlog读取完&lt;br/&gt;函数先不加锁读取binlog中的event，读完后，再加锁尝试读取一个event（加锁过程中，没有其他进程写进binlog），若有数据，则继续处理，若没有数据，则说明binlog读取完了，master会阻塞等待新的binlog写入。&lt;br/&gt;这样做主要为了：&lt;br/&gt;1. 不需要一直加锁读取binlog，保障性能；&lt;br/&gt;2. 无锁读取时会有其他进程写binlog，加锁可以保障这些新加的binlog得到妥善安置&lt;/li&gt;
-&lt;li&gt;心跳&lt;br/&gt;仅在不传送binlog时（master穷尽了binlog，开始阻塞等待新的binlog写入时）才进行心跳&lt;/li&gt;
-&lt;li&gt;Fake Rotate Event&lt;br/&gt;Fake Rotate Event在开始传送和切换binlog时发送到slave。主要作用是通知slave binlog filename，原因在源码comment里写的很清楚。但是很疑惑的是为什么在FD event里并没有binlog filename，这个问题发到了&lt;a href=&#34;http://stackoverflow.com/questions/19375951/in-mysql-replication-why-format-description-event-doesnt-include-binlogs-name&#34;&gt;StackoverFlow&lt;/a&gt;，未有答案。（诶，看看我的stackoverflow的记录就知道，我的问题都是死题）&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;h2 id=&#34;toc_2&#34;&gt;TODO&lt;/h2&gt;
-
-&lt;p&gt;有一些东西还是没弄懂，得慢慢读懂其他机制才可以，比如&lt;/p&gt;
-
-&lt;ol&gt;
-&lt;li&gt;max_alloed_packet是如何作用的&lt;/li&gt;
-&lt;li&gt;send last skip group heartbeat的作用&lt;/li&gt;
-&lt;li&gt;不同类型的event的具体处理，需要和slave端结合在一起&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;h2 id=&#34;toc_3&#34;&gt;我的笔记&lt;/h2&gt;
-
-&lt;p&gt;我的笔记&lt;a href=&#34;https://app.yinxiang.com/shard/s11/sh/f23e9619-9c3d-47f5-a911-8945d0ee02a5/f4eb8539fb2f99e1481496c994b2c270&#34;&gt;在此&lt;/a&gt;&lt;/p&gt;
 </description>
     </item>
     

@@ -7,7 +7,50 @@
     <language>zh-cn</language>
     
     
-    <updated>Wed, 23 Jul 2014 22:20:00 UTC</updated>
+    <updated>Sun, 17 Aug 2014 19:13:00 UTC</updated>
+    
+    <item>
+      <title>测试Mysql 5.5的crash safe</title>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-08-17-mysql-55-crash-safe</link>
+      <pubDate>Sun, 17 Aug 2014 19:13:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-08-17-mysql-55-crash-safe</guid>
+      <description>&lt;p&gt;事情的起因有点意思, 前几天QA在参照&lt;a href=&#34;http://bugs.mysql.com/bug.php?id=69444&#34;&gt;文档&lt;/a&gt;测试Mysql 5.6的crash safe特性. QA读到了源码里面的一段:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;  if ((error= w-&amp;gt;commit_positions(this, ptr_group,
+                                  w-&amp;gt;c_rli-&amp;gt;is_transactional())))
+    goto err;
+
+...
+
+  DBUG_EXECUTE_IF(&amp;quot;crash_after_update_pos_before_apply&amp;quot;,
+                  sql_print_information(&amp;quot;Crashing crash_after_update_pos_before_apply.&amp;quot;);
+                  DBUG_SUICIDE(););
+
+  error= do_commit(thd);
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;并用&lt;code&gt;crash_after_update_pos_before_apply&lt;/code&gt;选项成功复现了bug.&lt;/p&gt;
+
+&lt;p&gt;后来QA问我Mysql 5.5怎么测试crash safe, 因为她注意到Mysql 5.5的代码里并没有类似的测试插桩.&lt;/p&gt;
+
+&lt;p&gt;读过Mysql 5.5的源码后, 找到了下面的位置&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;int apply_event_and_update_pos(Log_event* ev, THD* thd, Relay_log_info* rli) {
+    if (reason == Log_event::EVENT_SKIP_NOT)
+    exec_res= ev-&amp;gt;apply_event(rli);
+    ...
+    //插入代码的位置
+    if (exec_res == 0) {
+        int error= ev-&amp;gt;update_pos(rli);
+        ...
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在标记的位置插入代码&lt;code&gt;DBUG_EXECUTE_IF(&amp;quot;crash_after_apply_log_and_before_update_pos&amp;quot;, DBUG_SUICIDE(););&lt;/code&gt;, 重新编译Mysql就可以用&lt;code&gt;crash_after_apply_log_and_before_update_pos&lt;/code&gt;作为debug选项了.&lt;/p&gt;
+</description>
+    </item>
     
     <item>
       <title>[翻译] Fixing MySQL group commit</title>
@@ -2320,95 +2363,6 @@ signal.Notify(c, syscall.SIGTTIN)
 &lt;/code&gt;&lt;/pre&gt;
 
 &lt;p&gt;目前无解, 但结论是用&lt;code&gt;types&lt;/code&gt;包进行的源码分析结果和编译时的略有差异&lt;/p&gt;
-</description>
-    </item>
-    
-    <item>
-      <title>GO exec.command.Wait 执行后台程序,在重定向输出时卡住</title>
-      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-02-22-go-exec-command-block-when-redirect-stdout</link>
-      <pubDate>Sat, 22 Feb 2014 10:30:00 UTC</pubDate>
-      
-      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-02-22-go-exec-command-block-when-redirect-stdout</guid>
-      <description>&lt;p&gt;在GO上发现以下现象&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;    c := exec.Command(&amp;quot;sh&amp;quot;, &amp;quot;-c&amp;quot;, &amp;quot;sleep 100 &amp;amp;&amp;quot;)
-    var b bytes.Buffer
-    c.Stdout = &amp;amp;b
-    
-    if e := c.Start(); nil != e {
-        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
-    }
-    if e := c.Wait(); nil != e {
-        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
-    }
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;这个代码会一直等到&lt;code&gt;sleep 100&lt;/code&gt;完成后才退出, 与常识不符.&lt;/p&gt;
-
-&lt;p&gt;但去掉Stdout重定向后, 代码就不会等待卡住&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;    c := exec.Command(&amp;quot;sh&amp;quot;, &amp;quot;-c&amp;quot;, &amp;quot;sleep 100 &amp;amp;&amp;quot;)
-    if e := c.Start(); nil != e {
-        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
-    }
-    if e := c.Wait(); nil != e {
-        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
-    }
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;在运行时打出stacktrace, 再翻翻GO的源代码, 发现GO卡在以下代码&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;    func (c *Cmd) Wait() error {
-        ...
-        state, err := c.Process.Wait()
-        ...
-        var copyError error
-        for _ = range c.goroutine {
-            if err := &amp;lt;-c.errch; err != nil &amp;amp;&amp;amp; copyError == nil {
-                copyError = err
-            }
-        }
-        ...
-    }
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;可以看到&lt;code&gt;Wait()&lt;/code&gt;在等待Process结束后, 还等待了所有&lt;code&gt;c.goroutine&lt;/code&gt;的&lt;code&gt;c.errch&lt;/code&gt;信号. 参看以下代码:&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;    func (c *Cmd) stdout() (f *os.File, err error) {
-        return c.writerDescriptor(c.Stdout)
-    }
-    
-    func (c *Cmd) writerDescriptor(w io.Writer) (f *os.File, err error) {
-        ...
-        c.goroutine = append(c.goroutine, func() error {
-            _, err := io.Copy(w, pr)
-            return err
-        })
-        ...
-    }
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;重定向&lt;code&gt;stdout&lt;/code&gt;时, 会添加一个监听任务到&lt;code&gt;goroutine&lt;/code&gt; (&lt;code&gt;stderr&lt;/code&gt;也是同理)&lt;/p&gt;
-
-&lt;p&gt;结论是由于将&lt;code&gt;sleep 100&lt;/code&gt;放到后台执行, 其进程&lt;code&gt;stdout&lt;/code&gt;并没有关闭, &lt;code&gt;io.Copy()&lt;/code&gt;不会返回, 所以会卡住&lt;/p&gt;
-
-&lt;p&gt;临时的解决方法就是将后台进程的&lt;code&gt;stdout&lt;/code&gt;和&lt;code&gt;stderr&lt;/code&gt;重定向出去, 以下代码不会卡住:&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;    c := exec.Command(&amp;quot;sh&amp;quot;, &amp;quot;-c&amp;quot;, &amp;quot;sleep 100 &amp;gt;/dev/null 2&amp;gt;/dev/null &amp;amp;&amp;quot;)
-    var b bytes.Buffer
-    c.Stdout = &amp;amp;b
-    
-    if e := c.Start(); nil != e {
-        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
-    }
-    if e := c.Wait(); nil != e {
-        fmt.Printf(&amp;quot;ERROR: %v\n&amp;quot;, e)
-    }
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;已经报了&lt;a href=&#34;https://code.google.com/p/go/issues/detail?id=7378&amp;amp;thanks=7378&amp;amp;ts=1392967848&#34;&gt;bug&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;但想不出好的GO代码的修改方案&lt;/p&gt;
 </description>
     </item>
     

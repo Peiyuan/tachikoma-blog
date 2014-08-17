@@ -3,8 +3,13 @@
   
   <url>
     <loc>http://ikarishinjieva.github.io/</loc>
-    <lastmod>2014-07-23T22:20:00+00:00</lastmod>
+    <lastmod>2014-08-17T19:13:00+00:00</lastmod>
     <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-08-17-mysql-55-crash-safe</loc>
+    <lastmod>2014-08-17T19:13:00+00:00</lastmod>
   </url>
   
   <url>
@@ -103,12 +108,12 @@
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-12-19-paxos-lease</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-12-21-paxos-lease-2</loc>
     <lastmod>2013-12-19T20:19:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-12-21-paxos-lease-2</loc>
+    <loc>http://ikarishinjieva.github.io/tachikoma-blog/post/2013-12-19-paxos-lease</loc>
     <lastmod>2013-12-19T20:19:00+00:00</lastmod>
   </url>
   

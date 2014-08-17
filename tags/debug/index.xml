@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+      <title>Debug on Tachikoma blog </title>
+      <generator uri="https://hugo.spf13.com">Hugo</generator>
+    <link>http://ikarishinjieva.github.io/tags/debug/index.xml</link>
+    <language>zh-cn</language>
+    
+    
+    <updated>Sun, 17 Aug 2014 19:13:00 UTC</updated>
+    
+    <item>
+      <title>测试Mysql 5.5的crash safe</title>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-08-17-mysql-55-crash-safe</link>
+      <pubDate>Sun, 17 Aug 2014 19:13:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-08-17-mysql-55-crash-safe</guid>
+      <description>&lt;p&gt;事情的起因有点意思, 前几天QA在参照&lt;a href=&#34;http://bugs.mysql.com/bug.php?id=69444&#34;&gt;文档&lt;/a&gt;测试Mysql 5.6的crash safe特性. QA读到了源码里面的一段:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;  if ((error= w-&amp;gt;commit_positions(this, ptr_group,
+                                  w-&amp;gt;c_rli-&amp;gt;is_transactional())))
+    goto err;
+
+...
+
+  DBUG_EXECUTE_IF(&amp;quot;crash_after_update_pos_before_apply&amp;quot;,
+                  sql_print_information(&amp;quot;Crashing crash_after_update_pos_before_apply.&amp;quot;);
+                  DBUG_SUICIDE(););
+
+  error= do_commit(thd);
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;并用&lt;code&gt;crash_after_update_pos_before_apply&lt;/code&gt;选项成功复现了bug.&lt;/p&gt;
+
+&lt;p&gt;后来QA问我Mysql 5.5怎么测试crash safe, 因为她注意到Mysql 5.5的代码里并没有类似的测试插桩.&lt;/p&gt;
+
+&lt;p&gt;读过Mysql 5.5的源码后, 找到了下面的位置&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;int apply_event_and_update_pos(Log_event* ev, THD* thd, Relay_log_info* rli) {
+    if (reason == Log_event::EVENT_SKIP_NOT)
+    exec_res= ev-&amp;gt;apply_event(rli);
+    ...
+    //插入代码的位置
+    if (exec_res == 0) {
+        int error= ev-&amp;gt;update_pos(rli);
+        ...
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在标记的位置插入代码&lt;code&gt;DBUG_EXECUTE_IF(&amp;quot;crash_after_apply_log_and_before_update_pos&amp;quot;, DBUG_SUICIDE(););&lt;/code&gt;, 重新编译Mysql就可以用&lt;code&gt;crash_after_apply_log_and_before_update_pos&lt;/code&gt;作为debug选项了.&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>
