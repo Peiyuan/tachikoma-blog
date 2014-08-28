@@ -7,7 +7,53 @@
     <language>zh-cn</language>
     
     
-    <updated>Sun, 17 Aug 2014 19:13:00 UTC</updated>
+    <updated>Thu, 28 Aug 2014 20:18:00 UTC</updated>
+    
+    <item>
+      <title>Mysql 5.6的crash-safe replication中与relay-log.info相关的部分</title>
+      <link>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-08-28-mysql-56-crash-safe</link>
+      <pubDate>Thu, 28 Aug 2014 20:18:00 UTC</pubDate>
+      
+      <guid>http://ikarishinjieva.github.io/tachikoma-blog/post/2014-08-28-mysql-56-crash-safe</guid>
+      <description>
+
+&lt;p&gt;这篇blog目的是记录一下对Mysql 5.6 crash-safe replication的学习, 以及报给mysql的一个相关&lt;a href=&#34;http://bugs.mysql.com/bug.php?id=73720&#34;&gt;bug&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;先推荐Mats Kindahl写的关于crash safe的&lt;a href=&#34;http://mysqlmusings.blogspot.com/2011/04/crash-safe-replication.html&#34;&gt;科普&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;toc_0&#34;&gt;crash-safe&lt;/h3&gt;
+
+&lt;p&gt;按照Mats Kindahl的分类, 在此仅涉及&amp;rdquo;crash-safe slaves&amp;rdquo;中与relay-log.info相关的部分&lt;/p&gt;
+
+&lt;p&gt;Mysql crash-safe的名字起得并不好, 正确的名字应该是&lt;code&gt;crash-safe-only-for-DML-of-innodb&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;涉及到DDL或非transactional型/非XA型的存储引擎时crash就不safe了, 比如这个&lt;a href=&#34;http://bugs.mysql.com/bug.php?id=69444&#34;&gt;bug&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;toc_1&#34;&gt;bug&lt;/h3&gt;
+
+&lt;p&gt;为了达成&lt;code&gt;crash-safe-only-for-DML-of-innodb&lt;/code&gt;,  需要开启&lt;code&gt;relay-log-info-repository = TABLE&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;简单说明一下DDL/transactional DML/non-transactional DML的binlog event执行的区别:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;DDL: &lt;code&gt;Query_event(DDL)&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;transactional DML: &lt;code&gt;Query_event(Begin)&lt;/code&gt; -&amp;gt; &lt;code&gt;Query_event(DML)&lt;/code&gt; -&amp;gt; &lt;code&gt;Xid_event&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;non-transactional DML: &lt;code&gt;Query_event(Begin)&lt;/code&gt; -&amp;gt; &lt;code&gt;Query_event(DML)&lt;/code&gt; -&amp;gt; &lt;code&gt;Query_event(Commit)&lt;/code&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;其中&lt;code&gt;Query_event&lt;/code&gt;中不会强制刷盘, 即&lt;code&gt;inc_group_relay_log_pos&lt;/code&gt;中调用的&lt;code&gt;flush_info(FALSE)&lt;/code&gt;; 而&lt;code&gt;Xid_event&lt;/code&gt;会强制刷盘.&lt;/p&gt;
+
+&lt;p&gt;如果使用&lt;code&gt;relay-log-info-repository=FILE&lt;/code&gt;, 不强制刷盘时会进行&lt;code&gt;flush_io_cache&lt;/code&gt;, 强制刷盘时进行&lt;code&gt;my_sync&lt;/code&gt; (&lt;code&gt;Rpl_info_file::do_flush_info&lt;/code&gt;)&lt;/p&gt;
+
+&lt;p&gt;如果使用&lt;code&gt;relay-log-info-repository=TABLE&lt;/code&gt;, 不强制刷盘时什么都不会做, 强制刷盘时才会更新表&lt;/p&gt;
+
+&lt;p&gt;也就是说仅执行DDL/non-transactional DML时, &lt;code&gt;slave_relay_log_info&lt;/code&gt;的信息不会更新, 与&lt;code&gt;SHOW SLAVE STATUS&lt;/code&gt;中的信息不同&lt;/p&gt;
+
+&lt;p&gt;报给了mysql一个&lt;a href=&#34;http://bugs.mysql.com/bug.php?id=73720&#34;&gt;bug&lt;/a&gt;, 并被接受&lt;/p&gt;
+
+&lt;p&gt;结论是谨慎使用&lt;code&gt;slave_relay_log_info&lt;/code&gt;中的值&lt;/p&gt;
+</description>
+    </item>
     
     <item>
       <title>测试Mysql 5.5的crash safe</title>
